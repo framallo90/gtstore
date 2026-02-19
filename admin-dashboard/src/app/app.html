@@ -1,0 +1,25 @@
+<header class="topbar">
+	<div class="container topbar__inner">
+		<div class="brand">
+			<h1 class="brand__title">
+				<a routerLink="/">
+					<img class="brand__wordmark" src="brand/logo-full.png" alt="GeekyTreasures Admin" />
+				</a>
+			</h1>
+		</div>
+
+		<nav class="nav">
+			@if (authService.isLoggedIn() && authService.hasAdminAccess()) {
+				<a class="nav__item" routerLink="/">Dashboard</a>
+				<a class="nav__item" routerLink="/products">Productos</a>
+				<a class="nav__item" routerLink="/orders">Pedidos</a>
+				<a class="nav__item" routerLink="/users">Usuarios</a>
+				<button class="nav__item" type="button" (click)="logout()">Salir</button>
+			}
+		</nav>
+	</div>
+</header>
+
+<main class="container app-main">
+	<router-outlet></router-outlet>
+</main>

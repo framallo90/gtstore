@@ -1,0 +1,233 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  STAFF
+  ADMIN
+}
+
+enum ProductType {
+  BOOK
+  COMIC
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  MERCADOPAGO
+}
+
+model User {
+  id               String     @id @default(uuid())
+  email            String     @unique
+  passwordHash     String
+  firstName        String
+  lastName         String
+  role             Role       @default(CUSTOMER)
+  refreshTokenHash String?
+  emailVerifiedAt  DateTime?
+  emailVerificationTokenHash      String?
+  emailVerificationTokenExpiresAt DateTime?
+  passwordResetTokenHash          String?
+  passwordResetTokenExpiresAt     DateTime?
+  cartItems        CartItem[]
+  orders           Order[]
+  analyticsEvents  AnalyticsEvent[]
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([emailVerificationTokenHash])
+  @@index([passwordResetTokenHash])
+}
+
+model Product {
+  id          String      @id @default(uuid())
+  title       String
+  description String
+  author      String
+  publisher   String?
+  isbn        String?
+  sku         String      @unique
+  type        ProductType
+  price       Decimal     @db.Decimal(10, 2)
+  stock       Int         @default(0)
+  coverUrl    String?
+  isFeatured  Boolean     @default(false)
+  isActive    Boolean     @default(true)
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([title])
+  @@index([author])
+  @@index([publisher])
+  @@index([type])
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  quantity  Int      @default(1)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+}
+
+model Order {
+  id          String      @id @default(uuid())
+  userId      String?
+  status      OrderStatus @default(PENDING)
+  paymentMethod PaymentMethod?
+  mpPreferenceId      String?
+  mpInitPoint         String?
+  mpSandboxInitPoint  String?
+  mpPaymentId         String?
+  mpPaymentStatus     String?
+  mpMerchantOrderId   String?
+  mpLastWebhookAt     DateTime?
+  subtotal    Decimal     @db.Decimal(10, 2)
+  discount    Decimal     @db.Decimal(10, 2)
+  total       Decimal     @db.Decimal(10, 2)
+  couponCode  String?
+  notes       String?
+  guestEmail     String?
+  guestFirstName String?
+  guestLastName  String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items       OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([mpPreferenceId])
+  @@index([mpPaymentId])
+}
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  productId   String
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  productName String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+}
+
+model IdempotencyKey {
+  id          String   @id @default(uuid())
+  scope       String
+  key         String
+  action      String
+  requestHash String
+  orderId     String?
+  createdAt   DateTime @default(now())
+
+  @@unique([scope, key, action])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  actorRole   String?
+  action      String
+  entityType  String
+  entityId    String?
+  requestId   String?
+  ip          String?
+  userAgent   String?
+  meta        Json?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([entityType])
+}
+
+model Coupon {
+  id         String       @id @default(uuid())
+  code       String       @unique
+  discount   Decimal      @db.Decimal(10, 2)
+  type       DiscountType
+  isActive   Boolean      @default(true)
+  startsAt   DateTime?
+  expiresAt  DateTime?
+  usageLimit Int?
+  usedCount  Int          @default(0)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model AnalyticsEvent {
+  id          String   @id @default(uuid())
+  name        String
+  path        String?
+  anonymousId String?
+  sessionId   String?
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  properties  Json?
+  createdAt   DateTime @default(now())
+
+  @@index([name])
+  @@index([createdAt])
+  @@index([userId])
+  @@index([anonymousId])
+  @@index([sessionId])
+}
+
+model ApiErrorLog {
+  id         String   @id @default(uuid())
+  requestId  String
+  occurredAt DateTime @default(now())
+  method     String
+  path       String
+  statusCode Int
+  message    String
+  name       String?
+  userId     String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([occurredAt])
+  @@index([requestId])
+  @@index([statusCode])
+  @@index([userId])
+}
