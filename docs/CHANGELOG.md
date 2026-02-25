@@ -2,6 +2,42 @@
 
 Este archivo se actualiza en cada cambio relevante antes de commitear.
 
+## 2026-02-25 10:49:36 -03:00
+
+### Commit tecnico asociado
+- `cedabb4`
+
+### Alcance
+- Hardening de despliegue Docker y proxy.
+- Mitigacion de seed accidental en produccion.
+- Healthcheck de API conectado a base de datos.
+
+### Archivos tecnicos
+- `Dockerfile.api`
+- `docker-compose.yml`
+- `api/src/main.ts`
+- `api/src/app/app.controller.ts`
+- `api/src/app/app.service.ts`
+- `api/src/app/app.controller.spec.ts`
+- `api/src/app/app.service.spec.ts`
+- `README.md`
+
+### Cambios aplicados
+- PostgreSQL expuesto solo en loopback del host: `127.0.0.1:5433:5432`.
+- Healthcheck de API pasa de `/api` a `/api/health`.
+- Nuevo endpoint `GET /api/health` con ping real a DB (`SELECT 1`).
+- En `Dockerfile.api`, `RUN_SEED=1` queda ignorado en produccion.
+- Hardening de `TRUST_PROXY`:
+  - `true` ya no habilita trust-all; se normaliza a `1`.
+  - `false` se normaliza a `0`.
+  - valores invalidos pasan a `0`.
+- README actualizado con recomendaciones de proxy, secretos y seed en produccion.
+
+### Validacion ejecutada
+- `npm run test:api` -> OK
+- `npm run build:api` -> OK
+- `docker compose config` -> OK
+
 ## 2026-02-25 10:40:07 -03:00
 
 ### Commit tecnico asociado
