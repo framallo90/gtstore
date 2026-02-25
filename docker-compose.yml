@@ -29,8 +29,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
     environment:
-      # Local: keep cookies working over plain HTTP. Production: set NODE_ENV=production + use HTTPS.
-      NODE_ENV: ${NODE_ENV:-development}
+      # Secure default. For local Docker development override with NODE_ENV=development.
+      NODE_ENV: ${NODE_ENV:-production}
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -69,7 +69,7 @@ services:
       - mp_access_token
       - mp_webhook_secret
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000'
     healthcheck:
       test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1']
       interval: 10s

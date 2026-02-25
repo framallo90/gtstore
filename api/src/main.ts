@@ -96,9 +96,13 @@ function assertRuntimeSecurityConfig() {
     'change_me_dev_only',
     'change_me_dev_only_min_32_chars_1234567890',
     'change_me_dev_only_min_32_chars_0987654321',
+    'example',
   ]);
   if (weakSecretValues.has(accessSecret.toLowerCase()) || weakSecretValues.has(refreshSecret.toLowerCase())) {
     throw new Error('Weak JWT secrets are not allowed in production.');
+  }
+  if (accessSecret.length < 32 || refreshSecret.length < 32) {
+    throw new Error('JWT secrets must be at least 32 characters in production.');
   }
 
   const weakAdminEmail = (process.env.ADMIN_EMAIL ?? '').trim().toLowerCase() === 'admin';

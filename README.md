@@ -127,13 +127,14 @@ docker compose run --rm api node prisma/seed.js
 Servicios:
 - Storefront: `http://localhost:4200` (Nginx)
 - Admin: `http://localhost:4300` (Nginx)
-- API: `http://localhost:3000/api`
+- API: `http://localhost:3000/api` (bind local: `127.0.0.1`)
 - Health API: `http://localhost:3000/api/health`
 - Swagger: `http://localhost:3000/api/docs`
 - PostgreSQL: `127.0.0.1:5433` (solo accesible desde el host local)
 
 Nota: `docker-compose.yml` monta secretos por archivo (`/run/secrets/*`) y evita inyectarlos como variables planas.
-Para desarrollo rapido, usa los ejemplos en `./.secrets/*.example` y reemplazalos con secretos reales antes de produccion.
+Para desarrollo rapido, usa los ejemplos en `./.secrets/*.example`.
+En produccion, el entrypoint rechaza valores placeholder (incluyendo `*.example` sin reemplazar) y la API no inicia.
 
 Nota: el contenedor `api` ejecuta `prisma migrate deploy` al iniciar. El seed ya no corre automaticamente.
 
@@ -142,6 +143,7 @@ Nota: en production Swagger se deshabilita por defecto; si queres habilitarlo se
 ## Produccion (checklist)
 
 - Setear `NODE_ENV=production`.
+- El default de Docker Compose ya es `NODE_ENV=production`; para local Docker, setear explicitamente `NODE_ENV=development`.
 - Usar HTTPS (requerido para cookies `secure` del refresh token).
 - Secretos:
   - No usar variables planas para credenciales de runtime.
