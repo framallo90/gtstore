@@ -2,6 +2,24 @@
 
 Este archivo se actualiza en cada cambio relevante antes de commitear.
 
+## 2026-02-25 10:52:00 -03:00
+
+### Commit tecnico asociado
+- `91f2bc2`
+
+### Alcance
+- Alineacion de `.env.example` con hardening de `TRUST_PROXY`.
+
+### Archivos tecnicos
+- `.env.example`
+
+### Cambios aplicados
+- Se dejo `TRUST_PROXY=0` como valor por defecto seguro.
+- Se reforzo el comentario de uso de proxy confiable y sanitizacion de headers reenviados.
+
+### Validacion ejecutada
+- Revision de diff de configuracion (`git diff -- .env.example`) -> OK
+
 ## 2026-02-25 10:49:36 -03:00
 
 ### Commit tecnico asociado
