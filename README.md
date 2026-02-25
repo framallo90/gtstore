@@ -134,7 +134,7 @@ Servicios:
 
 Nota: `docker-compose.yml` monta secretos por archivo (`/run/secrets/*`) y evita inyectarlos como variables planas.
 Para desarrollo rapido, usa los ejemplos en `./.secrets/*.example`.
-En produccion, el entrypoint rechaza valores placeholder (incluyendo `*.example` sin reemplazar) y la API no inicia.
+En produccion, el entrypoint rechaza valores placeholder y tambien rechaza secretos que apunten a rutas `*.example`; la API no inicia.
 
 Nota: el contenedor `api` ejecuta `prisma migrate deploy` al iniciar. El seed ya no corre automaticamente.
 

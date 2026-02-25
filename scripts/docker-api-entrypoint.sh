@@ -45,7 +45,36 @@ is_placeholder_secret() {
   esac
 }
 
+is_example_source_path() {
+  source_path="$1"
+  normalized="$(printf '%s' "$source_path" | tr '[:upper:]' '[:lower:]')"
+
+  case "$normalized" in
+    *.example|*.example/*|*.example\\*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 if [ "${NODE_ENV:-}" = "production" ]; then
+  if is_example_source_path "${SECRET_SOURCE_POSTGRES_PASSWORD:-}"; then
+    echo "[entrypoint] POSTGRES_PASSWORD source cannot be a .example file in production." >&2
+    exit 1
+  fi
+
+  if is_example_source_path "${SECRET_SOURCE_JWT_ACCESS_SECRET:-}"; then
+    echo "[entrypoint] JWT_ACCESS_SECRET source cannot be a .example file in production." >&2
+    exit 1
+  fi
+
+  if is_example_source_path "${SECRET_SOURCE_JWT_REFRESH_SECRET:-}"; then
+    echo "[entrypoint] JWT_REFRESH_SECRET source cannot be a .example file in production." >&2
+    exit 1
+  fi
+
   if is_placeholder_secret "${POSTGRES_PASSWORD:-}"; then
     echo "[entrypoint] invalid POSTGRES_PASSWORD for production." >&2
     exit 1
@@ -62,6 +91,14 @@ if [ "${NODE_ENV:-}" = "production" ]; then
   fi
 
   if [ "${MP_ENV:-sandbox}" = "production" ]; then
+    if is_example_source_path "${SECRET_SOURCE_MP_ACCESS_TOKEN:-}"; then
+      echo "[entrypoint] MP_ACCESS_TOKEN source cannot be a .example file in production." >&2
+      exit 1
+    fi
+    if is_example_source_path "${SECRET_SOURCE_MP_WEBHOOK_SECRET:-}"; then
+      echo "[entrypoint] MP_WEBHOOK_SECRET source cannot be a .example file in production." >&2
+      exit 1
+    fi
     if is_placeholder_secret "${MP_ACCESS_TOKEN:-}"; then
       echo "[entrypoint] invalid MP_ACCESS_TOKEN for production." >&2
       exit 1
