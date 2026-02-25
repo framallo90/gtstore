@@ -36,7 +36,7 @@ services:
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:4300}
       PORT: ${PORT:-3000}
-      TRUST_PROXY: ${TRUST_PROXY:-1}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-}
       # Optional: used only by prisma seed to create an admin user in local environments.
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}

@@ -55,7 +55,7 @@ function getClientIp(req: { ip?: string; socket?: { remoteAddress?: string | nul
 function parseTrustProxySetting(raw: string): boolean | number | string {
   const v = raw.trim();
   if (!v) {
-    return 1;
+    return 0;
   }
   const lower = v.toLowerCase();
   if (lower === 'true') {
@@ -120,12 +120,12 @@ async function bootstrap() {
 
   const expressApp = app.getHttpAdapter().getInstance();
   expressApp.disable('x-powered-by');
-  // We expect to run behind a reverse proxy (nginx) in Docker. If you expose the API directly,
-  // set TRUST_PROXY=0 to prevent trusting attacker-controlled X-Forwarded-* headers.
+  // Secure default: do not trust X-Forwarded-* unless explicitly configured.
+  // Set TRUST_PROXY=1 (or a strict hop count) only when running behind a trusted reverse proxy.
   const trustProxyRaw = process.env.TRUST_PROXY;
   expressApp.set(
     'trust proxy',
-    trustProxyRaw === undefined ? 1 : parseTrustProxySetting(trustProxyRaw),
+    trustProxyRaw === undefined ? 0 : parseTrustProxySetting(trustProxyRaw),
   );
 
   // Request id for correlation across logs and client error reports.

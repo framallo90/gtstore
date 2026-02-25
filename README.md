@@ -50,6 +50,12 @@ Opcional (para emails transaccionales reales via SMTP):
 - `SMTP_USER`
 - `SMTP_PASS`
 
+Opcional (cotizacion de envio con Andreani):
+- `ANDREANI_ENABLED=true`
+- `ANDREANI_USERNAME` / `ANDREANI_PASSWORD`
+- `ANDREANI_SENDER_CONTRACT` / `ANDREANI_SENDER_CLIENT`
+- `ANDREANI_SENDER_PROVINCE` / `ANDREANI_SENDER_DISTRICT` / `ANDREANI_SENDER_LOCALITY` / `ANDREANI_SENDER_ZIP_CODE`
+
 Opcional (solo Docker/primer arranque): forzar seed al iniciar contenedor:
 - `RUN_SEED=1`
 
@@ -127,8 +133,8 @@ Nota: en production Swagger se deshabilita por defecto; si queres habilitarlo se
 - Usar HTTPS (requerido para cookies `secure` del refresh token).
 - Configurar `CORS_ORIGINS` con tus dominios reales (storefront/admin).
 - Configurar `TRUST_PROXY` segun tu red:
-  - Detras de nginx/reverse proxy: `TRUST_PROXY=1` (default).
-  - API expuesta directo (no recomendado): `TRUST_PROXY=0`.
+  - API expuesta directo (recomendado por defecto): `TRUST_PROXY=0`.
+  - Detras de nginx/reverse proxy: `TRUST_PROXY=1` (o hop count estricto).
 - Emails reales:
   - `EMAIL_DRIVER=smtp` + `EMAIL_FROM` + `SMTP_*`.
 - Mercado Pago real:
@@ -137,6 +143,10 @@ Nota: en production Swagger se deshabilita por defecto; si queres habilitarlo se
   - `STORE_BASE_URL` con tu dominio publico
   - `MP_NOTIFICATION_URL` debe ser publico (webhook).
   - `MP_WEBHOOK_SECRET` para validar firma de webhooks entrantes.
+- Envio Andreani:
+  - Activar `ANDREANI_ENABLED=true`.
+  - Completar credenciales y datos de origen (`ANDREANI_*`).
+  - El checkout toma `Ciudad + Codigo postal` para cotizar y sumar envio al total.
 - Primer arranque (opcional):
   - Para crear admin automaticamente, setear `ADMIN_EMAIL`/`ADMIN_PASSWORD` y correr con `RUN_SEED=1` solo una vez.
   - Luego volver `RUN_SEED=0` (y mantener `NODE_ENV=production`).

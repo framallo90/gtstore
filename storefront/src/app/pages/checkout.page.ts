@@ -17,13 +17,14 @@ import {
   Validators,
 } from '@angular/forms';
 import { Router } from '@angular/router';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { debounceTime } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService } from '../core/api.service';
 import { AnalyticsService } from '../core/analytics.service';
 import { AuthService } from '../core/auth.service';
 import { CartService } from '../core/cart.service';
-import type { OrderQuote, PaymentMethod } from '../core/models';
+import type { Order, OrderQuote, PaymentMethod } from '../core/models';
 
 function guestEmailMatchValidator(control: AbstractControl): ValidationErrors | null {
   const email = control.get('guestEmail')?.value;
@@ -51,137 +52,334 @@ function guestEmailMatchValidator(control: AbstractControl): ValidationErrors | 
 
         @if (guestLoading()) {
           <p class="muted">Cargando productos del carrito...</p>
-        } @else if (activeLines().length === 0) {
+        } @else if (activeLines().length === 0 && !completedOrder()) {
           <p class="muted">No hay items en el carrito.</p>
         } @else {
-          <h3>Resumen</h3>
-          <ul class="admin-list">
-            @for (item of activeLines(); track item.key) {
-              <li class="admin-list__item">
-                <div class="cart-row__main">
-                  <strong>{{ item.product.title }}</strong>
-                  <span class="muted">x{{ item.quantity }}</span>
+          <ol class="checkout-stepper" aria-label="Etapas de compra">
+            @for (step of checkoutSteps; track step.id) {
+              <li
+                class="checkout-stepper__item"
+                [class.checkout-stepper__item--active]="currentStep() === step.id"
+                [class.checkout-stepper__item--done]="
+                  currentStep() > step.id || (step.id === 4 && !!completedOrder())
+                "
+              >
+                <button
+                  class="checkout-stepper__dot"
+                  type="button"
+                  [disabled]="!canJumpToStep(step.id)"
+                  (click)="goToStep(step.id)"
+                >
+                  {{ step.id }}
+                </button>
+                <div class="checkout-stepper__copy">
+                  <strong>{{ step.title }}</strong>
+                  <p class="muted">{{ step.caption }}</p>
                 </div>
-                <span class="muted">{{ item.product.price * item.quantity }} USD</span>
               </li>
             }
-          </ul>
-
-          <div class="checkout__totals">
-            <div class="checkout__line">
-              <span class="muted">Subtotal</span>
-              <strong>{{ displaySubtotal() }} USD</strong>
-            </div>
-            @if (displayDiscount() > 0) {
-              <div class="checkout__line">
-                <span class="muted">Descuento</span>
-                <strong>-{{ displayDiscount() }} USD</strong>
-              </div>
-            }
-            <div class="checkout__line checkout__line--total">
-              <span class="muted">Total</span>
-              <strong>{{ displayTotal() }} USD</strong>
-            </div>
-            @if (quoteLoading()) {
-              <p class="muted">Calculando total...</p>
-            }
-            @if (quoteError()) {
-              <p class="muted">{{ quoteError() }}</p>
-            }
-          </div>
+          </ol>
 
           <form [formGroup]="form" (ngSubmit)="submit()">
-          <label for="couponCode">Cupon</label>
-          <div class="checkout__coupon">
-            <input
-              id="couponCode"
-              formControlName="couponCode"
-              placeholder="Ej: GEEK10"
-              autocomplete="off"
-            />
-            <button type="button" (click)="applyCoupon()" [disabled]="quoteLoading()">
-              Aplicar
-            </button>
-          </div>
+            @if (currentStep() === 1) {
+              <section class="checkout-stage">
+                <h3>1) Resumen de compra</h3>
+                <ul class="admin-list">
+                  @for (item of activeLines(); track item.key) {
+                    <li class="admin-list__item">
+                      <div class="cart-row__main">
+                        <strong>{{ item.product.title }}</strong>
+                        <span class="muted">x{{ item.quantity }}</span>
+                      </div>
+                      <span class="muted">{{ item.product.price * item.quantity }} USD</span>
+                    </li>
+                  }
+                </ul>
 
-          <label for="paymentMethod">Metodo de pago</label>
-          <select id="paymentMethod" formControlName="paymentMethod" aria-describedby="paymentMethodHint">
-            <option value="MERCADOPAGO">Mercado Pago</option>
-            <option value="TRANSFER">Transferencia</option>
-            <option value="CASH">Efectivo</option>
-          </select>
-          <p id="paymentMethodHint" class="field-msg field-msg--hint">
-            @if (form.get('paymentMethod')?.value === 'MERCADOPAGO') {
-              Te vamos a redirigir a Mercado Pago para completar el pago.
-            } @else {
-              El pedido queda en estado PENDIENTE hasta que confirmemos el pago.
-            }
-          </p>
+                <label for="couponCode">Cupon</label>
+                <div class="checkout__coupon">
+                  <input
+                    id="couponCode"
+                    formControlName="couponCode"
+                    placeholder="Ej: GEEK10"
+                    autocomplete="off"
+                  />
+                  <button type="button" (click)="applyCoupon()" [disabled]="quoteLoading()">
+                    Aplicar
+                  </button>
+                </div>
 
-          @if (!auth.isLoggedIn()) {
-            <h3>Datos del comprador</h3>
-            <p class="muted">
-              Podes comprar como invitado. Si despues creas una cuenta, ya vas a conocer
-              la tienda y tu experiencia va a ser mas rapida.
-            </p>
+                <div class="checkout__totals">
+                  <div class="checkout__line">
+                    <span class="muted">Subtotal</span>
+                    <strong>{{ displaySubtotal() }} USD</strong>
+                  </div>
+                  @if (displayDiscount() > 0) {
+                    <div class="checkout__line">
+                      <span class="muted">Descuento</span>
+                      <strong>-{{ displayDiscount() }} USD</strong>
+                    </div>
+                  }
+                  @if (displayShippingCost() > 0) {
+                    <div class="checkout__line">
+                      <span class="muted">
+                        Envio {{ displayShippingProvider() ? '(' + displayShippingProvider() + ')' : '' }}
+                      </span>
+                      <strong>{{ displayShippingCost() }} USD</strong>
+                    </div>
+                  }
+                  <div class="checkout__line checkout__line--total">
+                    <span class="muted">Total parcial</span>
+                    <strong>{{ displayTotal() }} USD</strong>
+                  </div>
+                  @if (quoteLoading()) {
+                    <p class="muted">Calculando total...</p>
+                  }
+                  @if (quoteError()) {
+                    <p class="muted">{{ quoteError() }}</p>
+                  }
+                </div>
 
-            <label for="guestEmail">Email</label>
-            <input
-              id="guestEmail"
-              formControlName="guestEmail"
-              type="email"
-              autocomplete="email"
-              inputmode="email"
-              [attr.aria-invalid]="guestEmailInvalid()"
-            />
-            @if (guestEmailInvalid()) {
-              <p class="field-msg field-msg--error">{{ guestEmailErrorMessage() }}</p>
-            } @else {
-              <p class="field-msg field-msg--hint">
-                A este email te enviamos confirmaciones y links de pago.
-              </p>
-            }
-
-            <label for="guestEmailConfirm">Repetir email</label>
-            <input
-              id="guestEmailConfirm"
-              formControlName="guestEmailConfirm"
-              type="email"
-              autocomplete="email"
-              inputmode="email"
-              [attr.aria-invalid]="guestEmailConfirmInvalid()"
-            />
-            @if (guestEmailConfirmInvalid()) {
-              <p class="field-msg field-msg--error">
-                {{ guestEmailConfirmErrorMessage() }}
-              </p>
-            } @else {
-              <p class="field-msg field-msg--hint">Repetilo para evitar errores.</p>
+                <div class="checkout-actions">
+                  <button type="button" (click)="goToStep(2)">Continuar a envio</button>
+                </div>
+              </section>
             }
 
-            <label for="guestFirstName">Nombre</label>
-            <input id="guestFirstName" formControlName="guestFirstName" autocomplete="given-name" />
+            @if (currentStep() === 2) {
+              <section class="checkout-stage">
+                <h3>2) Envio</h3>
+                <p class="muted">
+                  Completa ciudad y codigo postal para cotizar con Andreani.
+                </p>
 
-            <label for="guestLastName">Apellido</label>
-            <input id="guestLastName" formControlName="guestLastName" autocomplete="family-name" />
+                <label for="shippingCity">Ciudad</label>
+                <input
+                  id="shippingCity"
+                  formControlName="shippingCity"
+                  placeholder="Ej: Rosario"
+                  autocomplete="address-level2"
+                />
 
-            <label class="checkbox">
-              <input type="checkbox" formControlName="rememberGuest" />
-              Guardar estos datos solo en este dispositivo para retomar el checkout.
-            </label>
+                <label for="shippingPostalCode">Codigo postal</label>
+                <input
+                  id="shippingPostalCode"
+                  formControlName="shippingPostalCode"
+                  placeholder="Ej: 2000"
+                  autocomplete="postal-code"
+                  inputmode="text"
+                  [attr.aria-invalid]="shippingPostalCodeInvalid()"
+                />
+                @if (shippingPostalCodeInvalid()) {
+                  <p class="field-msg field-msg--error">
+                    Codigo postal invalido. Usa 4-8 digitos o formato CPA.
+                  </p>
+                }
 
-            <div class="cart__cta">
-              <button type="button" (click)="goLogin()">Login</button>
-              <button type="button" (click)="goRegister()">Crear cuenta</button>
-            </div>
-          }
+                @if (shippingMapUrl(); as mapUrl) {
+                  <div class="shipping-map">
+                    <iframe
+                      [src]="mapUrl"
+                      title="Mapa de envio"
+                      loading="lazy"
+                      referrerpolicy="no-referrer-when-downgrade"
+                    ></iframe>
+                  </div>
+                } @else {
+                  <p class="field-msg field-msg--hint">
+                    Ingresa ciudad y CP para ver el mapa de destino.
+                  </p>
+                }
 
-          <label for="notes">Notas</label>
-          <textarea id="notes" formControlName="notes"></textarea>
+                <div class="checkout__totals">
+                  <div class="checkout__line">
+                    <span class="muted">Subtotal productos</span>
+                    <strong>{{ displaySubtotal() }} USD</strong>
+                  </div>
+                  <div class="checkout__line">
+                    <span class="muted">
+                      Costo de envio
+                      {{ displayShippingProvider() ? '(' + displayShippingProvider() + ')' : '' }}
+                    </span>
+                    <strong>
+                      @if (displayShippingCost() > 0) {
+                        {{ displayShippingCost() }} USD
+                      } @else {
+                        A cotizar
+                      }
+                    </strong>
+                  </div>
+                  <div class="checkout__line checkout__line--total">
+                    <span class="muted">Total estimado</span>
+                    <strong>{{ displayTotal() }} USD</strong>
+                  </div>
+                  @if (quoteLoading()) {
+                    <p class="muted">Cotizando envio...</p>
+                  }
+                  @if (quoteError()) {
+                    <p class="field-msg field-msg--error">{{ quoteError() }}</p>
+                  }
+                </div>
 
-            <button [disabled]="submitting()" type="submit">
-              @if (auth.isLoggedIn()) { Confirmar pedido } @else { Comprar como invitado }
-            </button>
+                <div class="checkout-actions">
+                  <button type="button" class="link-button" (click)="goToStep(1)">Volver</button>
+                  <button type="button" (click)="refreshShippingQuote()" [disabled]="quoteLoading()">
+                    Recalcular envio
+                  </button>
+                  <button type="button" (click)="goToStep(3)">Continuar a pago</button>
+                </div>
+              </section>
+            }
+
+            @if (currentStep() === 3) {
+              <section class="checkout-stage">
+                <h3>3) Pago</h3>
+
+                <label for="paymentMethod">Metodo de pago</label>
+                <select id="paymentMethod" formControlName="paymentMethod" aria-describedby="paymentMethodHint">
+                  <option value="MERCADOPAGO">Mercado Pago</option>
+                  <option value="TRANSFER">Transferencia</option>
+                  <option value="CASH">Efectivo</option>
+                </select>
+                <p id="paymentMethodHint" class="field-msg field-msg--hint">
+                  @if (form.get('paymentMethod')?.value === 'MERCADOPAGO') {
+                    Te redirigimos a Mercado Pago para completar el pago.
+                  } @else {
+                    El pedido queda en estado PENDIENTE hasta confirmar acreditacion.
+                  }
+                </p>
+
+                @if (!auth.isLoggedIn()) {
+                  <h3>Datos del comprador</h3>
+                  <p class="muted">
+                    Podes comprar como invitado y guardar tus datos en este dispositivo.
+                  </p>
+
+                  <label for="guestEmail">Email</label>
+                  <input
+                    id="guestEmail"
+                    formControlName="guestEmail"
+                    type="email"
+                    autocomplete="email"
+                    inputmode="email"
+                    [attr.aria-invalid]="guestEmailInvalid()"
+                  />
+                  @if (guestEmailInvalid()) {
+                    <p class="field-msg field-msg--error">{{ guestEmailErrorMessage() }}</p>
+                  } @else {
+                    <p class="field-msg field-msg--hint">
+                      A este email te enviamos confirmaciones y links de pago.
+                    </p>
+                  }
+
+                  <label for="guestEmailConfirm">Repetir email</label>
+                  <input
+                    id="guestEmailConfirm"
+                    formControlName="guestEmailConfirm"
+                    type="email"
+                    autocomplete="email"
+                    inputmode="email"
+                    [attr.aria-invalid]="guestEmailConfirmInvalid()"
+                  />
+                  @if (guestEmailConfirmInvalid()) {
+                    <p class="field-msg field-msg--error">
+                      {{ guestEmailConfirmErrorMessage() }}
+                    </p>
+                  } @else {
+                    <p class="field-msg field-msg--hint">Repetilo para evitar errores.</p>
+                  }
+
+                  <label for="guestFirstName">Nombre</label>
+                  <input id="guestFirstName" formControlName="guestFirstName" autocomplete="given-name" />
+
+                  <label for="guestLastName">Apellido</label>
+                  <input id="guestLastName" formControlName="guestLastName" autocomplete="family-name" />
+
+                  <label class="checkbox">
+                    <input type="checkbox" formControlName="rememberGuest" />
+                    Guardar estos datos solo en este dispositivo para retomar el checkout.
+                  </label>
+
+                  <div class="cart__cta">
+                    <button type="button" (click)="goLogin()">Login</button>
+                    <button type="button" (click)="goRegister()">Crear cuenta</button>
+                  </div>
+                }
+
+                <label for="notes">Notas</label>
+                <textarea id="notes" formControlName="notes"></textarea>
+
+                <div class="checkout__totals">
+                  <div class="checkout__line">
+                    <span class="muted">Total a pagar</span>
+                    <strong>{{ displayTotal() }} USD</strong>
+                  </div>
+                </div>
+
+                <div class="checkout-actions">
+                  <button type="button" class="link-button" (click)="goToStep(2)">Volver</button>
+                  <button [disabled]="submitting()" type="submit">
+                    @if (auth.isLoggedIn()) { Confirmar pedido } @else { Comprar como invitado }
+                  </button>
+                </div>
+              </section>
+            }
+
+            @if (currentStep() === 4) {
+              <section class="checkout-stage">
+                <h3>4) Recibo y estados</h3>
+
+                @if (completedOrder(); as order) {
+                  <div class="checkout__totals">
+                    <div class="checkout__line">
+                      <span class="muted">Pedido</span>
+                      <strong>{{ order.id }}</strong>
+                    </div>
+                    <div class="checkout__line">
+                      <span class="muted">Metodo</span>
+                      <strong>{{ order.paymentMethod || 'No informado' }}</strong>
+                    </div>
+                    <div class="checkout__line">
+                      <span class="muted">Total final</span>
+                      <strong>{{ order.total }} USD</strong>
+                    </div>
+                    @if (order.shippingCost) {
+                      <div class="checkout__line">
+                        <span class="muted">Envio</span>
+                        <strong>{{ order.shippingCost }} USD</strong>
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <p class="muted">No hay recibo cargado todavia.</p>
+                }
+
+                <h3>Emails de estado</h3>
+                <ul class="admin-list">
+                  <li class="admin-list__item">
+                    <strong>1. Confirmacion inicial</strong>
+                    <span class="muted">Te llega al crear el pedido (PENDIENTE).</span>
+                  </li>
+                  <li class="admin-list__item">
+                    <strong>2. Actualizacion de pago</strong>
+                    <span class="muted">
+                      Si pagas por Mercado Pago, recibis confirmacion cuando el webhook lo aprueba.
+                    </span>
+                  </li>
+                  <li class="admin-list__item">
+                    <strong>3. Cambios logisticos</strong>
+                    <span class="muted">
+                      Cuando el pedido pase a PROCESSING, SHIPPED y DELIVERED.
+                    </span>
+                  </li>
+                </ul>
+
+                <div class="checkout-actions">
+                  <button type="button" (click)="goCatalog()">Seguir comprando</button>
+                  <button type="button" (click)="goProfile()">Ver mis pedidos</button>
+                </div>
+              </section>
+            }
           </form>
 
           @if (message()) {
@@ -196,6 +394,7 @@ export class CheckoutPage implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly sanitizer = inject(DomSanitizer);
   readonly auth = inject(AuthService);
   private readonly cart = inject(CartService);
   private readonly analytics = inject(AnalyticsService);
@@ -207,9 +406,12 @@ export class CheckoutPage implements OnInit {
   submitted = signal(false);
   message = signal('');
   submitting = signal(false);
+  currentStep = signal<1 | 2 | 3 | 4>(1);
   quote = signal<OrderQuote | null>(null);
   quoteLoading = signal(false);
   quoteError = signal('');
+  shippingMapUrl = signal<SafeResourceUrl | null>(null);
+  completedOrder = signal<Order | null>(null);
   appliedCoupon = signal<string | undefined>(undefined);
   private idempotencyKey = signal<string | undefined>(undefined);
   private idempotencyBasis = signal<string | undefined>(undefined);
@@ -218,16 +420,30 @@ export class CheckoutPage implements OnInit {
   private quoteSeq = 0;
   private beginTracked = false;
 
+  readonly checkoutSteps = [
+    { id: 1 as const, title: 'Resumen', caption: 'Productos y precio' },
+    { id: 2 as const, title: 'Envio', caption: 'Mapa y costo' },
+    { id: 3 as const, title: 'Pago', caption: 'Metodo y datos' },
+    { id: 4 as const, title: 'Recibo', caption: 'Estados por email' },
+  ];
+
   guestLoading = computed(() => this.cart.guestLoading());
   activeLines = computed(() => this.cart.activeLines());
   cartSubtotal = computed(() => this.cart.activeTotal());
 
   displaySubtotal = computed(() => this.quote()?.subtotal ?? this.cartSubtotal());
   displayDiscount = computed(() => this.quote()?.discount ?? 0);
+  displayShippingCost = computed(() => this.quote()?.shippingCost ?? 0);
+  displayShippingProvider = computed(() => this.quote()?.shippingProvider ?? '');
   displayTotal = computed(() => this.quote()?.total ?? this.cartSubtotal());
 
   form = this.fb.group({
     couponCode: [''],
+    shippingCity: ['', [Validators.maxLength(120)]],
+    shippingPostalCode: [
+      '',
+      [Validators.maxLength(10), Validators.pattern(/^(?:[A-Za-z]\d{4}[A-Za-z]{0,3}|\d{4,8})$/)],
+    ],
     paymentMethod: ['TRANSFER', [Validators.required]],
     notes: [''],
     guestEmail: ['', [Validators.email, Validators.required]],
@@ -239,6 +455,7 @@ export class CheckoutPage implements OnInit {
 
   ngOnInit() {
     this.restoreState();
+    this.updateShippingMapUrl();
 
     if (this.auth.isLoggedIn()) {
       this.cart.refreshServerCart().subscribe();
@@ -250,6 +467,7 @@ export class CheckoutPage implements OnInit {
       .pipe(debounceTime(350), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         this.maybeClearIdempotencyKey();
+        this.updateShippingMapUrl();
         this.persistState();
       });
 
@@ -257,6 +475,7 @@ export class CheckoutPage implements OnInit {
       () => {
         // Keep applied coupon persistence in sync too.
         void this.appliedCoupon();
+        void this.currentStep();
         this.maybeClearIdempotencyKey();
         this.persistState();
       },
@@ -283,6 +502,9 @@ export class CheckoutPage implements OnInit {
             this.quote.set(null);
             this.quoteError.set('');
             this.clearState();
+            if (!this.completedOrder()) {
+              this.currentStep.set(1);
+            }
             return;
           }
         } else {
@@ -291,6 +513,9 @@ export class CheckoutPage implements OnInit {
             this.quote.set(null);
             this.quoteError.set('');
             this.clearState();
+            if (!this.completedOrder()) {
+              this.currentStep.set(1);
+            }
             return;
           }
           if (this.guestLoading() && lines.length === 0) {
@@ -333,8 +558,51 @@ export class CheckoutPage implements OnInit {
     this.refreshQuote({ reason: 'apply_coupon' });
   }
 
+  canJumpToStep(step: 1 | 2 | 3 | 4) {
+    if (step === 1) {
+      return true;
+    }
+    if (step === 2) {
+      return this.activeLines().length > 0;
+    }
+    if (step === 3) {
+      return this.currentStep() > 2 || this.isShippingInputValid();
+    }
+    return !!this.completedOrder();
+  }
+
+  goToStep(step: 1 | 2 | 3 | 4) {
+    if (step === 4) {
+      if (this.completedOrder()) {
+        this.currentStep.set(4);
+      }
+      return;
+    }
+    if (step === 3) {
+      if (!this.canProceedFromShipping()) {
+        this.message.set('Completa ciudad y codigo postal para pasar a pago.');
+        return;
+      }
+      this.currentStep.set(3);
+      return;
+    }
+    this.currentStep.set(step);
+  }
+
+  refreshShippingQuote() {
+    this.refreshQuote({ reason: 'shipping_refresh' });
+  }
+
   submit() {
     if (this.submitting()) {
+      return;
+    }
+    if (this.currentStep() !== 3) {
+      if (this.currentStep() === 1) {
+        this.goToStep(2);
+      } else if (this.currentStep() === 2) {
+        this.goToStep(3);
+      }
       return;
     }
     this.submitted.set(true);
@@ -343,6 +611,14 @@ export class CheckoutPage implements OnInit {
     const couponCode = this.normalizeCoupon(value.couponCode);
     this.appliedCoupon.set(couponCode);
     const paymentMethod = this.normalizePaymentMethod(value.paymentMethod);
+    const shippingCity = this.normalizeShippingCity(value.shippingCity);
+    const shippingPostalCode = this.normalizeShippingPostalCode(value.shippingPostalCode);
+
+    if (!shippingCity || !shippingPostalCode) {
+      this.message.set('Completa ciudad y codigo postal para continuar con el pago.');
+      this.currentStep.set(2);
+      return;
+    }
 
     this.submitting.set(true);
 
@@ -365,13 +641,22 @@ export class CheckoutPage implements OnInit {
         typeof value.guestLastName === 'string' ? value.guestLastName.trim() : '';
 
       this.form.patchValue(
-        { guestEmail, guestEmailConfirm, guestFirstName, guestLastName },
+        {
+          guestEmail,
+          guestEmailConfirm,
+          guestFirstName,
+          guestLastName,
+          shippingCity: shippingCity ?? '',
+          shippingPostalCode: shippingPostalCode ?? '',
+        },
         { emitEvent: false },
       );
 
       if (this.form.invalid) {
         this.form.markAllAsTouched();
-        this.message.set('Revisa tu email. Debe ser valido y coincidir en ambos campos.');
+        this.message.set(
+          'Revisa los campos. El email debe ser valido y, si cargas envio, ciudad/CP tambien.',
+        );
         this.submitting.set(false);
         return;
       }
@@ -384,7 +669,16 @@ export class CheckoutPage implements OnInit {
         return;
       }
 
-      const idempotencyKey = this.ensureIdempotencyKey();
+      let idempotencyKey: string;
+      try {
+        idempotencyKey = this.ensureIdempotencyKey();
+      } catch {
+        this.message.set(
+          'No pudimos preparar un identificador seguro para el pago en este navegador. Reintenta en una pestana moderna.',
+        );
+        this.submitting.set(false);
+        return;
+      }
 
       const items = this.cart.guestItems().map((i) => ({
         productId: i.productId,
@@ -401,6 +695,8 @@ export class CheckoutPage implements OnInit {
               guestEmail,
               guestFirstName,
               guestLastName,
+              shippingCity,
+              shippingPostalCode,
             },
             { idempotencyKey },
           )
@@ -442,6 +738,8 @@ export class CheckoutPage implements OnInit {
           guestEmail,
           guestFirstName,
           guestLastName,
+          shippingCity,
+          shippingPostalCode,
         }, { idempotencyKey })
         .subscribe({
           next: (order) => {
@@ -454,9 +752,10 @@ export class CheckoutPage implements OnInit {
               paymentMethod: order.paymentMethod ?? paymentMethod,
             });
             this.analytics.flushNow('purchase');
+            this.completedOrder.set(order);
             this.clearState();
             this.cart.clear();
-            setTimeout(() => this.router.navigateByUrl('/'), 700);
+            this.currentStep.set(4);
           },
           error: (err) => {
             this.analytics.track('checkout_failed', { mode: 'guest' });
@@ -477,7 +776,16 @@ export class CheckoutPage implements OnInit {
       return;
     }
 
-    const idempotencyKey = this.ensureIdempotencyKey();
+    let idempotencyKey: string;
+    try {
+      idempotencyKey = this.ensureIdempotencyKey();
+    } catch {
+      this.message.set(
+        'No pudimos preparar un identificador seguro para el pago en este navegador. Reintenta en una pestana moderna.',
+      );
+      this.submitting.set(false);
+      return;
+    }
 
     if (paymentMethod === 'MERCADOPAGO') {
       this.api
@@ -485,6 +793,8 @@ export class CheckoutPage implements OnInit {
           {
             couponCode,
             notes: value.notes ?? undefined,
+            shippingCity,
+            shippingPostalCode,
           },
           { idempotencyKey },
         )
@@ -522,9 +832,11 @@ export class CheckoutPage implements OnInit {
         couponCode,
         paymentMethod,
         notes: value.notes ?? undefined,
+        shippingCity,
+        shippingPostalCode,
       }, { idempotencyKey })
       .subscribe({
-        next: () => {
+        next: (order) => {
           this.message.set('Pedido creado con exito');
           this.analytics.track('purchase_success', {
             mode: 'auth',
@@ -533,9 +845,10 @@ export class CheckoutPage implements OnInit {
             paymentMethod,
           });
           this.analytics.flushNow('purchase');
+          this.completedOrder.set(order);
           this.clearState();
           this.cart.refreshServerCart().subscribe();
-          setTimeout(() => this.router.navigateByUrl('/profile'), 500);
+          this.currentStep.set(4);
         },
         error: (err) => {
           this.analytics.track('checkout_failed', { mode: 'auth' });
@@ -554,6 +867,60 @@ export class CheckoutPage implements OnInit {
 
   goRegister() {
     this.router.navigate(['/register'], { queryParams: { returnUrl: '/checkout' } });
+  }
+
+  goCatalog() {
+    this.router.navigateByUrl('/catalog');
+  }
+
+  goProfile() {
+    this.router.navigateByUrl('/profile');
+  }
+
+  private canProceedFromShipping() {
+    if (!this.isShippingInputValid()) {
+      this.form.controls.shippingCity.markAsTouched();
+      this.form.controls.shippingPostalCode.markAsTouched();
+      return false;
+    }
+
+    if (this.quoteLoading()) {
+      this.message.set('Estamos calculando el envio. Espera un momento.');
+      return false;
+    }
+
+    if (this.quoteError()) {
+      this.message.set(this.quoteError());
+      return false;
+    }
+
+    return true;
+  }
+
+  private isShippingInputValid() {
+    const value = this.form.getRawValue();
+    const shippingCity = this.normalizeShippingCity(value.shippingCity);
+    const shippingPostalCode = this.normalizeShippingPostalCode(value.shippingPostalCode);
+    return !!shippingCity && !!shippingPostalCode;
+  }
+
+  private updateShippingMapUrl() {
+    const value = this.form.getRawValue();
+    const city = this.normalizeShippingCity(value.shippingCity);
+    const cpRaw = typeof value.shippingPostalCode === 'string'
+      ? value.shippingPostalCode.trim().toUpperCase().slice(0, 10)
+      : '';
+
+    if (!city && !cpRaw) {
+      this.shippingMapUrl.set(null);
+      return;
+    }
+
+    const query = [city, cpRaw, 'Argentina']
+      .filter((chunk): chunk is string => typeof chunk === 'string' && chunk.length > 0)
+      .join(', ');
+    const url = `https://maps.google.com/maps?q=${encodeURIComponent(query)}&output=embed`;
+    this.shippingMapUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(url));
   }
 
   private scheduleQuote() {
@@ -580,12 +947,24 @@ export class CheckoutPage implements OnInit {
 
     const seq = ++this.quoteSeq;
     const couponCode = this.appliedCoupon();
+    const value = this.form.getRawValue();
+    const shippingCity = this.normalizeShippingCity(value.shippingCity);
+    const shippingPostalCode = this.normalizeShippingPostalCode(value.shippingPostalCode);
+    const wantsShipping = this.hasShippingData(value.shippingCity, value.shippingPostalCode);
+    const shippingHintError =
+      wantsShipping && (!shippingCity || !shippingPostalCode)
+        ? 'Completa ciudad y codigo postal validos para cotizar envio.'
+        : '';
 
     this.quoteLoading.set(true);
-    this.quoteError.set('');
+    this.quoteError.set(shippingHintError);
 
     if (this.auth.isLoggedIn()) {
-      this.api.quoteFromCart({ couponCode }).subscribe({
+      this.api.quoteFromCart({
+        couponCode,
+        shippingCity: shippingCity ?? undefined,
+        shippingPostalCode: shippingPostalCode ?? undefined,
+      }).subscribe({
         next: (res) => {
           if (seq !== this.quoteSeq) {
             return;
@@ -618,7 +997,12 @@ export class CheckoutPage implements OnInit {
     }
 
     const items = this.cart.guestItems().map((i) => ({ productId: i.productId, quantity: i.quantity }));
-    this.api.quoteGuest({ items, couponCode }).subscribe({
+    this.api.quoteGuest({
+      items,
+      couponCode,
+      shippingCity: shippingCity ?? undefined,
+      shippingPostalCode: shippingPostalCode ?? undefined,
+    }).subscribe({
       next: (res) => {
         if (seq !== this.quoteSeq) {
           return;
@@ -660,6 +1044,38 @@ export class CheckoutPage implements OnInit {
     return trimmed.toUpperCase();
   }
 
+  private normalizeShippingCity(input: unknown): string | undefined {
+    if (typeof input !== 'string') {
+      return undefined;
+    }
+    const trimmed = input.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    return trimmed.slice(0, 120);
+  }
+
+  private normalizeShippingPostalCode(input: unknown): string | undefined {
+    if (typeof input !== 'string') {
+      return undefined;
+    }
+    const trimmed = input.trim().toUpperCase();
+    if (!trimmed) {
+      return undefined;
+    }
+    if (!/^(?:[A-Z]\d{4}[A-Z]{0,3}|\d{4,8})$/.test(trimmed)) {
+      return undefined;
+    }
+    return trimmed.slice(0, 10);
+  }
+
+  private hasShippingData(city: unknown, postalCode: unknown): boolean {
+    return (
+      (typeof city === 'string' && city.trim().length > 0) ||
+      (typeof postalCode === 'string' && postalCode.trim().length > 0)
+    );
+  }
+
   private normalizePaymentMethod(input: unknown): PaymentMethod | undefined {
     if (input === 'CASH' || input === 'TRANSFER' || input === 'MERCADOPAGO') {
       return input;
@@ -668,54 +1084,87 @@ export class CheckoutPage implements OnInit {
   }
 
   private mapApiErrorToMessage(err: unknown): string | undefined {
-    const message = this.extractApiErrorMessage(err);
-    if (!message) {
-      return undefined;
-    }
+    const apiError = this.extractApiError(err);
+    const message = apiError.message;
+    const errorCode = apiError.code?.trim().toUpperCase();
 
-    if (message === 'Checkout already processed') {
+    if (errorCode === 'CHECKOUT_ALREADY_PROCESSED' || message === 'Checkout already processed') {
       return 'Este pedido ya fue procesado. Si no lo ves reflejado, recarga la pagina o revisa tu perfil.';
     }
-    if (message === 'Idempotency-Key reused with a different request') {
+    if (
+      errorCode === 'IDEMPOTENCY_KEY_REUSED' ||
+      message === 'Idempotency-Key reused with a different request'
+    ) {
       return 'Detectamos un reintento con datos distintos. Actualiza el carrito/cupon y vuelve a confirmar.';
     }
 
-    if (message === 'Invalid coupon') {
+    if (errorCode === 'COUPON_INVALID' || message === 'Invalid coupon') {
       return 'Cupon invalido.';
     }
-    if (message === 'Coupon expired') {
+    if (errorCode === 'COUPON_EXPIRED' || message === 'Coupon expired') {
       return 'El cupon ya vencio.';
     }
-    if (message === 'Coupon not active yet') {
+    if (errorCode === 'COUPON_NOT_ACTIVE' || message === 'Coupon not active yet') {
       return 'El cupon todavia no esta activo.';
     }
-    if (message === 'Coupon usage limit reached') {
+    if (errorCode === 'COUPON_USAGE_LIMIT_REACHED' || message === 'Coupon usage limit reached') {
       return 'El cupon ya alcanzo su limite de uso.';
     }
-    if (message === 'Cart is empty') {
+    if (errorCode === 'CART_EMPTY' || message === 'Cart is empty') {
       return 'Tu carrito esta vacio.';
     }
-    if (message.toLowerCase().includes('insufficient stock')) {
+    if (
+      errorCode === 'SHIPPING_CITY_POSTAL_REQUIRED' ||
+      message === 'Shipping city and postal code are required'
+    ) {
+      return 'Completa ciudad y codigo postal para cotizar el envio.';
+    }
+    if (errorCode === 'SHIPPING_POSTAL_CODE_INVALID' || message === 'Shipping postal code is invalid') {
+      return 'El codigo postal no es valido.';
+    }
+    if (errorCode === 'SHIPPING_PROVIDER_UNAVAILABLE' || message === 'Shipping provider unavailable') {
+      return 'El cotizador de envio no esta disponible ahora.';
+    }
+    if (message?.toLowerCase().includes('andreani')) {
+      return 'No se pudo cotizar envio con Andreani. Verifica ciudad/CP o intenta mas tarde.';
+    }
+    if (
+      errorCode === 'INSUFFICIENT_STOCK' ||
+      message?.toLowerCase().includes('insufficient stock')
+    ) {
       return 'No hay stock suficiente para completar la compra.';
     }
-    if (message.toLowerCase().includes('product not available')) {
+    if (
+      errorCode === 'PRODUCT_NOT_AVAILABLE' ||
+      message?.toLowerCase().includes('product not available')
+    ) {
       return 'Hay productos que ya no estan disponibles.';
     }
 
     return message;
   }
 
-  private extractApiErrorMessage(err: unknown): string | undefined {
+  private extractApiError(err: unknown): { message?: string; code?: string } {
     const anyErr = err as { error?: unknown };
-    const payload = anyErr?.error as { message?: unknown } | undefined;
+    const payload = anyErr?.error as
+      | { message?: unknown; code?: unknown; errorCode?: unknown }
+      | undefined;
+
+    const code =
+      typeof payload?.code === 'string'
+        ? payload.code
+        : typeof payload?.errorCode === 'string'
+          ? payload.errorCode
+          : undefined;
+
     const msg = payload?.message;
     if (typeof msg === 'string') {
-      return msg;
+      return { message: msg, code };
     }
     if (Array.isArray(msg) && msg.length > 0 && typeof msg[0] === 'string') {
-      return msg[0];
+      return { message: msg[0], code };
     }
-    return undefined;
+    return { code };
   }
 
   private restoreState() {
@@ -726,14 +1175,13 @@ export class CheckoutPage implements OnInit {
       }
       const parsed = JSON.parse(raw) as unknown as {
         updatedAt?: number;
+        currentStep?: number;
         couponCode?: string;
         paymentMethod?: string;
         appliedCoupon?: string;
-        notes?: string;
-        idempotencyKey?: string;
-        idempotencyBasis?: string;
+        shippingCity?: string;
+        shippingPostalCode?: string;
         guestEmail?: string;
-        guestEmailConfirm?: string;
         guestFirstName?: string;
         guestLastName?: string;
         rememberGuest?: boolean;
@@ -752,18 +1200,20 @@ export class CheckoutPage implements OnInit {
       }
 
       const rememberGuest = parsed.rememberGuest === true;
+      const restoredStep =
+        parsed.currentStep === 2 || parsed.currentStep === 3 ? parsed.currentStep : 1;
+      this.currentStep.set(restoredStep);
 
       this.form.patchValue(
         {
           couponCode: typeof parsed.couponCode === 'string' ? parsed.couponCode : '',
+          shippingCity:
+            typeof parsed.shippingCity === 'string' ? parsed.shippingCity : '',
+          shippingPostalCode:
+            typeof parsed.shippingPostalCode === 'string' ? parsed.shippingPostalCode : '',
           paymentMethod: this.normalizePaymentMethod(parsed.paymentMethod) ?? 'TRANSFER',
-          notes: rememberGuest && typeof parsed.notes === 'string' ? parsed.notes : '',
           guestEmail:
             rememberGuest && typeof parsed.guestEmail === 'string' ? parsed.guestEmail : '',
-          guestEmailConfirm:
-            rememberGuest && typeof parsed.guestEmailConfirm === 'string'
-              ? parsed.guestEmailConfirm
-              : '',
           guestFirstName:
             rememberGuest && typeof parsed.guestFirstName === 'string'
               ? parsed.guestFirstName
@@ -782,17 +1232,6 @@ export class CheckoutPage implements OnInit {
           ? parsed.appliedCoupon.trim().toUpperCase()
           : undefined;
       this.appliedCoupon.set(applied);
-
-      const idempotencyKey =
-        typeof parsed.idempotencyKey === 'string' && parsed.idempotencyKey.trim().length <= 200
-          ? parsed.idempotencyKey.trim()
-          : undefined;
-      const idempotencyBasis =
-        typeof parsed.idempotencyBasis === 'string' && parsed.idempotencyBasis.trim()
-          ? parsed.idempotencyBasis
-          : undefined;
-      this.idempotencyKey.set(idempotencyKey);
-      this.idempotencyBasis.set(idempotencyBasis);
     } catch {
       // Ignore invalid storage.
     }
@@ -804,18 +1243,16 @@ export class CheckoutPage implements OnInit {
       const rememberGuest = value.rememberGuest === true;
       const payload = {
         updatedAt: Date.now(),
+        currentStep: this.currentStep() >= 4 ? 3 : this.currentStep(),
         couponCode: typeof value.couponCode === 'string' ? value.couponCode : '',
+        shippingCity:
+          typeof value.shippingCity === 'string' ? value.shippingCity : '',
+        shippingPostalCode:
+          typeof value.shippingPostalCode === 'string' ? value.shippingPostalCode : '',
         paymentMethod: this.normalizePaymentMethod(value.paymentMethod),
         appliedCoupon: this.appliedCoupon(),
-        notes: rememberGuest && typeof value.notes === 'string' ? value.notes : '',
-        idempotencyKey: this.idempotencyKey(),
-        idempotencyBasis: this.idempotencyBasis(),
         guestEmail:
           rememberGuest && typeof value.guestEmail === 'string' ? value.guestEmail : '',
-        guestEmailConfirm:
-          rememberGuest && typeof value.guestEmailConfirm === 'string'
-            ? value.guestEmailConfirm
-            : '',
         guestFirstName:
           rememberGuest && typeof value.guestFirstName === 'string'
             ? value.guestFirstName
@@ -881,6 +1318,15 @@ export class CheckoutPage implements OnInit {
     return 'Revisa el email.';
   }
 
+  shippingPostalCodeInvalid() {
+    const ctrl = this.form.controls.shippingPostalCode;
+    const value = typeof ctrl.value === 'string' ? ctrl.value.trim() : '';
+    if (!value) {
+      return false;
+    }
+    return ctrl.invalid && (ctrl.touched || this.submitted());
+  }
+
   private ensureIdempotencyKey(): string {
     const basis = this.buildIdempotencyBasis();
     const existingKey = this.idempotencyKey();
@@ -943,6 +1389,8 @@ export class CheckoutPage implements OnInit {
     const guestEmail = !loggedIn && typeof value.guestEmail === 'string'
       ? value.guestEmail.trim().toLowerCase()
       : '';
+    const shippingCity = this.normalizeShippingCity(value.shippingCity) ?? '';
+    const shippingPostalCode = this.normalizeShippingPostalCode(value.shippingPostalCode) ?? '';
 
     const payload = {
       mode: loggedIn ? 'auth' : 'guest',
@@ -950,6 +1398,8 @@ export class CheckoutPage implements OnInit {
       couponCode: this.appliedCoupon() ?? '',
       paymentMethod: this.normalizePaymentMethod(value.paymentMethod) ?? '',
       guestEmail,
+      shippingCity,
+      shippingPostalCode,
     };
 
     return JSON.stringify(payload);
@@ -973,7 +1423,7 @@ export class CheckoutPage implements OnInit {
         .map((b) => b.toString(16).padStart(2, '0'))
         .join('');
     } catch {
-      return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      throw new Error('Secure random generator unavailable');
     }
   }
 }
