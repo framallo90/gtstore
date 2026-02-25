@@ -10,10 +10,8 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
-  AbstractControl,
   FormBuilder,
   ReactiveFormsModule,
-  type ValidationErrors,
   Validators,
 } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -26,22 +24,6 @@ import { AuthService } from '../core/auth.service';
 import { CartService } from '../core/cart.service';
 import type { Order, OrderQuote, PaymentMethod } from '../core/models';
 
-function guestEmailMatchValidator(control: AbstractControl): ValidationErrors | null {
-  const email = control.get('guestEmail')?.value;
-  const confirm = control.get('guestEmailConfirm')?.value;
-
-  if (typeof email !== 'string' || typeof confirm !== 'string') {
-    return null;
-  }
-  if (!email || !confirm) {
-    return null;
-  }
-
-  const normalizedEmail = email.trim().toLowerCase();
-  const normalizedConfirm = confirm.trim().toLowerCase();
-  return normalizedEmail === normalizedConfirm ? null : { guestEmailMismatch: true };
-}
-
 @Component({
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule],
@@ -51,7 +33,11 @@ function guestEmailMatchValidator(control: AbstractControl): ValidationErrors | 
         <h2>Checkout</h2>
 
         @if (guestLoading()) {
-          <p class="muted">Cargando productos del carrito...</p>
+          <div class="skeleton-list" aria-live="polite" aria-label="Cargando carrito">
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+          </div>
         } @else if (activeLines().length === 0 && !completedOrder()) {
           <p class="muted">No hay items en el carrito.</p>
         } @else {
@@ -86,7 +72,14 @@ function guestEmailMatchValidator(control: AbstractControl): ValidationErrors | 
                 <h3>1) Resumen de compra</h3>
                 <ul class="admin-list">
                   @for (item of activeLines(); track item.key) {
-                    <li class="admin-list__item">
+                    <li class="admin-list__item checkout-item">
+                      <div class="checkout-item__thumb" aria-hidden="true">
+                        @if (item.product.coverUrl) {
+                          <img [src]="item.product.coverUrl" [alt]="'Portada de ' + item.product.title" loading="lazy" />
+                        } @else {
+                          <div class="checkout-item__thumb--placeholder"></div>
+                        }
+                      </div>
                       <div class="cart-row__main">
                         <strong>{{ item.product.title }}</strong>
                         <span class="muted">x{{ item.quantity }}</span>
@@ -133,7 +126,7 @@ function guestEmailMatchValidator(control: AbstractControl): ValidationErrors | 
                     <strong>{{ displayTotal() }} USD</strong>
                   </div>
                   @if (quoteLoading()) {
-                    <p class="muted">Calculando total...</p>
+                    <p class="loading-inline"><span class="spinner" aria-hidden="true"></span>Calculando total...</p>
                   }
                   @if (quoteError()) {
                     <p class="muted">{{ quoteError() }}</p>
@@ -169,9 +162,10 @@ function guestEmailMatchValidator(control: AbstractControl): ValidationErrors | 
                   autocomplete="postal-code"
                   inputmode="text"
                   [attr.aria-invalid]="shippingPostalCodeInvalid()"
+                  [attr.aria-errormessage]="shippingPostalCodeInvalid() ? 'checkout-shipping-postal-error' : null"
                 />
                 @if (shippingPostalCodeInvalid()) {
-                  <p class="field-msg field-msg--error">
+                  <p id="checkout-shipping-postal-error" class="field-msg field-msg--error">
                     Codigo postal invalido. Usa 4-8 digitos o formato CPA.
                   </p>
                 }
@@ -214,7 +208,7 @@ function guestEmailMatchValidator(control: AbstractControl): ValidationErrors | 
                     <strong>{{ displayTotal() }} USD</strong>
                   </div>
                   @if (quoteLoading()) {
-                    <p class="muted">Cotizando envio...</p>
+                    <p class="loading-inline"><span class="spinner" aria-hidden="true"></span>Cotizando envio...</p>
                   }
                   @if (quoteError()) {
                     <p class="field-msg field-msg--error">{{ quoteError() }}</p>
@@ -235,12 +229,19 @@ function guestEmailMatchValidator(control: AbstractControl): ValidationErrors | 
               <section class="checkout-stage">
                 <h3>3) Pago</h3>
 
-                <label for="paymentMethod">Metodo de pago</label>
-                <select id="paymentMethod" formControlName="paymentMethod" aria-describedby="paymentMethodHint">
-                  <option value="MERCADOPAGO">Mercado Pago</option>
-                  <option value="TRANSFER">Transferencia</option>
-                  <option value="CASH">Efectivo</option>
-                </select>
+                <p class="field-msg field-msg--hint">Elegi como queres pagar.</p>
+                <div class="payment-cards" role="radiogroup" aria-label="Metodo de pago" aria-describedby="paymentMethodHint">
+                  @for (option of paymentOptions; track option.value) {
+                    <label class="payment-card" [class.payment-card--selected]="form.controls.paymentMethod.value === option.value">
+                      <input class="sr-only" type="radio" formControlName="paymentMethod" [value]="option.value" />
+                      <span class="payment-card__icon" aria-hidden="true">{{ option.icon }}</span>
+                      <span class="payment-card__copy">
+                        <strong>{{ option.label }}</strong>
+                        <small>{{ option.description }}</small>
+                      </span>
+                    </label>
+                  }
+                </div>
                 <p id="paymentMethodHint" class="field-msg field-msg--hint">
                   @if (form.get('paymentMethod')?.value === 'MERCADOPAGO') {
                     Te redirigimos a Mercado Pago para completar el pago.
@@ -263,30 +264,14 @@ function guestEmailMatchValidator(control: AbstractControl): ValidationErrors | 
                     autocomplete="email"
                     inputmode="email"
                     [attr.aria-invalid]="guestEmailInvalid()"
+                    [attr.aria-errormessage]="guestEmailInvalid() ? 'checkout-guest-email-error' : null"
                   />
                   @if (guestEmailInvalid()) {
-                    <p class="field-msg field-msg--error">{{ guestEmailErrorMessage() }}</p>
+                    <p id="checkout-guest-email-error" class="field-msg field-msg--error">{{ guestEmailErrorMessage() }}</p>
                   } @else {
                     <p class="field-msg field-msg--hint">
                       A este email te enviamos confirmaciones y links de pago.
                     </p>
-                  }
-
-                  <label for="guestEmailConfirm">Repetir email</label>
-                  <input
-                    id="guestEmailConfirm"
-                    formControlName="guestEmailConfirm"
-                    type="email"
-                    autocomplete="email"
-                    inputmode="email"
-                    [attr.aria-invalid]="guestEmailConfirmInvalid()"
-                  />
-                  @if (guestEmailConfirmInvalid()) {
-                    <p class="field-msg field-msg--error">
-                      {{ guestEmailConfirmErrorMessage() }}
-                    </p>
-                  } @else {
-                    <p class="field-msg field-msg--hint">Repetilo para evitar errores.</p>
                   }
 
                   <label for="guestFirstName">Nombre</label>
@@ -383,11 +368,179 @@ function guestEmailMatchValidator(control: AbstractControl): ValidationErrors | 
           </form>
 
           @if (message()) {
-            <p class="muted">{{ message() }}</p>
+            <p id="checkout-message" class="form-alert" role="status" aria-live="polite" tabindex="-1">{{ message() }}</p>
           }
         }
       </section>
     </section>
+  `,
+  styles: `
+    .checkout-item {
+      display: grid;
+      grid-template-columns: 54px 1fr auto;
+      align-items: center;
+      gap: 0.7rem;
+    }
+
+    .checkout-item__thumb {
+      width: 54px;
+      height: 72px;
+      border-radius: 10px;
+      border: 1px solid hsl(var(--brand-h) 34% 74% / 0.72);
+      background: hsl(0 0% 100% / 0.86);
+      overflow: hidden;
+    }
+
+    .checkout-item__thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .checkout-item__thumb--placeholder {
+      width: 100%;
+      height: 100%;
+      background:
+        radial-gradient(
+          320px 160px at 15% -20%,
+          hsl(var(--h1) 90% 60% / 0.24),
+          transparent 55%
+        ),
+        linear-gradient(140deg, hsl(var(--brand-h) 35% 92%), hsl(var(--brand-h) 20% 98%));
+    }
+
+    .payment-cards {
+      display: grid;
+      gap: 0.55rem;
+    }
+
+    .payment-card {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.68rem 0.82rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid hsl(var(--brand-h) 34% 74% / 0.72);
+      background: hsl(0 0% 100% / 0.8);
+      cursor: pointer;
+      transition:
+        border-color 140ms ease,
+        box-shadow 140ms ease,
+        transform 140ms ease,
+        background 140ms ease;
+    }
+
+    .payment-card:hover {
+      transform: translateY(-1px);
+      border-color: hsl(var(--brand-h) 46% 62% / 0.74);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .payment-card--selected {
+      border-color: hsl(var(--h2) 64% 46% / 0.52);
+      background: linear-gradient(145deg, hsl(0 0% 100% / 0.92), hsl(var(--h2) 82% 94% / 0.88));
+      box-shadow: var(--shadow-sm);
+    }
+
+    .payment-card__icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 999px;
+      border: 1px solid hsl(var(--brand-h) 34% 74% / 0.72);
+      background: hsl(var(--brand-h) 44% 96% / 0.9);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .payment-card__copy {
+      display: grid;
+      gap: 0.08rem;
+    }
+
+    .payment-card__copy small {
+      color: var(--muted);
+    }
+
+    .skeleton-list {
+      display: grid;
+      gap: 0.55rem;
+    }
+
+    .skeleton-row {
+      height: 60px;
+      border-radius: var(--radius-sm);
+      border: 1px solid hsl(var(--brand-h) 34% 74% / 0.52);
+      background:
+        linear-gradient(
+          90deg,
+          hsl(var(--brand-h) 24% 92% / 0.72) 0%,
+          hsl(var(--brand-h) 28% 96% / 0.9) 50%,
+          hsl(var(--brand-h) 24% 92% / 0.72) 100%
+        );
+      background-size: 200% 100%;
+      animation: checkout-skeleton-shimmer 1.2s linear infinite;
+    }
+
+    .loading-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      color: var(--muted);
+    }
+
+    .spinner {
+      width: 1rem;
+      height: 1rem;
+      border-radius: 999px;
+      border: 2px solid hsl(var(--brand-h) 34% 74% / 0.72);
+      border-top-color: hsl(var(--h2) 65% 45%);
+      animation: checkout-spin 0.85s linear infinite;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .payment-card .sr-only:focus-visible + .payment-card__icon {
+      box-shadow: var(--ring);
+    }
+
+    @keyframes checkout-spin {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes checkout-skeleton-shimmer {
+      from {
+        background-position: 200% 0;
+      }
+      to {
+        background-position: -200% 0;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .checkout-item {
+        grid-template-columns: 46px 1fr;
+      }
+    }
   `,
 })
 export class CheckoutPage implements OnInit {
@@ -426,6 +579,31 @@ export class CheckoutPage implements OnInit {
     { id: 3 as const, title: 'Pago', caption: 'Metodo y datos' },
     { id: 4 as const, title: 'Recibo', caption: 'Estados por email' },
   ];
+  readonly paymentOptions: ReadonlyArray<{
+    value: PaymentMethod;
+    label: string;
+    description: string;
+    icon: string;
+  }> = [
+    {
+      value: 'MERCADOPAGO',
+      label: 'Mercado Pago',
+      description: 'Pago online con tarjeta, saldo o transferencia.',
+      icon: 'MP',
+    },
+    {
+      value: 'TRANSFER',
+      label: 'Transferencia',
+      description: 'Te enviamos los datos para transferir.',
+      icon: 'TR',
+    },
+    {
+      value: 'CASH',
+      label: 'Efectivo',
+      description: 'Pago en efectivo al retirar o coordinar.',
+      icon: '$',
+    },
+  ];
 
   guestLoading = computed(() => this.cart.guestLoading());
   activeLines = computed(() => this.cart.activeLines());
@@ -447,11 +625,10 @@ export class CheckoutPage implements OnInit {
     paymentMethod: ['TRANSFER', [Validators.required]],
     notes: [''],
     guestEmail: ['', [Validators.email, Validators.required]],
-    guestEmailConfirm: ['', [Validators.email, Validators.required]],
     guestFirstName: ['', [Validators.required]],
     guestLastName: ['', [Validators.required]],
     rememberGuest: [false],
-  }, { validators: [guestEmailMatchValidator] });
+  });
 
   ngOnInit() {
     this.restoreState();
@@ -581,6 +758,7 @@ export class CheckoutPage implements OnInit {
     if (step === 3) {
       if (!this.canProceedFromShipping()) {
         this.message.set('Completa ciudad y codigo postal para pasar a pago.');
+        this.focusMessage();
         return;
       }
       this.currentStep.set(3);
@@ -617,6 +795,7 @@ export class CheckoutPage implements OnInit {
     if (!shippingCity || !shippingPostalCode) {
       this.message.set('Completa ciudad y codigo postal para continuar con el pago.');
       this.currentStep.set(2);
+      this.focusMessage();
       return;
     }
 
@@ -631,10 +810,6 @@ export class CheckoutPage implements OnInit {
 
       const guestEmail =
         typeof value.guestEmail === 'string' ? value.guestEmail.trim().toLowerCase() : '';
-      const guestEmailConfirm =
-        typeof value.guestEmailConfirm === 'string'
-          ? value.guestEmailConfirm.trim().toLowerCase()
-          : '';
       const guestFirstName =
         typeof value.guestFirstName === 'string' ? value.guestFirstName.trim() : '';
       const guestLastName =
@@ -643,7 +818,6 @@ export class CheckoutPage implements OnInit {
       this.form.patchValue(
         {
           guestEmail,
-          guestEmailConfirm,
           guestFirstName,
           guestLastName,
           shippingCity: shippingCity ?? '',
@@ -655,17 +829,21 @@ export class CheckoutPage implements OnInit {
       if (this.form.invalid) {
         this.form.markAllAsTouched();
         this.message.set(
-          'Revisa los campos. El email debe ser valido y, si cargas envio, ciudad/CP tambien.',
+          'Revisa los campos obligatorios para continuar.',
         );
         this.submitting.set(false);
+        this.focusFirstInvalidField();
+        this.focusMessage();
         return;
       }
 
       this.persistState();
 
-      if (!guestEmail || !guestEmailConfirm || !guestFirstName || !guestLastName) {
-        this.message.set('Completa tu email (dos veces), nombre y apellido para continuar.');
+      if (!guestEmail || !guestFirstName || !guestLastName) {
+        this.message.set('Completa tu email, nombre y apellido para continuar.');
         this.submitting.set(false);
+        this.focusFirstInvalidField();
+        this.focusMessage();
         return;
       }
 
@@ -677,6 +855,7 @@ export class CheckoutPage implements OnInit {
           'No pudimos preparar un identificador seguro para el pago en este navegador. Reintenta en una pestana moderna.',
         );
         this.submitting.set(false);
+        this.focusMessage();
         return;
       }
 
@@ -721,6 +900,7 @@ export class CheckoutPage implements OnInit {
               this.analytics.track('checkout_failed', { mode: 'guest' });
               this.message.set(this.mapApiErrorToMessage(err) ?? 'No se pudo iniciar el pago');
               this.submitting.set(false);
+              this.focusMessage();
             },
             complete: () => {
               this.submitting.set(false);
@@ -761,6 +941,7 @@ export class CheckoutPage implements OnInit {
             this.analytics.track('checkout_failed', { mode: 'guest' });
             this.message.set(this.mapApiErrorToMessage(err) ?? 'No se pudo crear el pedido');
             this.submitting.set(false);
+            this.focusMessage();
           },
           complete: () => {
             this.submitting.set(false);
@@ -773,6 +954,7 @@ export class CheckoutPage implements OnInit {
     if (!paymentMethod) {
       this.message.set('Selecciona un metodo de pago valido.');
       this.submitting.set(false);
+      this.focusMessage();
       return;
     }
 
@@ -784,6 +966,7 @@ export class CheckoutPage implements OnInit {
         'No pudimos preparar un identificador seguro para el pago en este navegador. Reintenta en una pestana moderna.',
       );
       this.submitting.set(false);
+      this.focusMessage();
       return;
     }
 
@@ -819,6 +1002,7 @@ export class CheckoutPage implements OnInit {
             this.analytics.track('checkout_failed', { mode: 'auth' });
             this.message.set(this.mapApiErrorToMessage(err) ?? 'No se pudo iniciar el pago');
             this.submitting.set(false);
+            this.focusMessage();
           },
           complete: () => {
             this.submitting.set(false);
@@ -854,6 +1038,7 @@ export class CheckoutPage implements OnInit {
           this.analytics.track('checkout_failed', { mode: 'auth' });
           this.message.set(this.mapApiErrorToMessage(err) ?? 'No se pudo crear el pedido');
           this.submitting.set(false);
+          this.focusMessage();
         },
         complete: () => {
           this.submitting.set(false);
@@ -886,11 +1071,13 @@ export class CheckoutPage implements OnInit {
 
     if (this.quoteLoading()) {
       this.message.set('Estamos calculando el envio. Espera un momento.');
+      this.focusMessage();
       return false;
     }
 
     if (this.quoteError()) {
       this.message.set(this.quoteError());
+      this.focusMessage();
       return false;
     }
 
@@ -1285,14 +1472,6 @@ export class CheckoutPage implements OnInit {
     return ctrl.invalid && (ctrl.touched || this.submitted());
   }
 
-  guestEmailConfirmInvalid() {
-    const ctrl = this.form.controls.guestEmailConfirm;
-    return (
-      (ctrl.invalid || this.form.hasError('guestEmailMismatch')) &&
-      (ctrl.touched || this.submitted())
-    );
-  }
-
   guestEmailErrorMessage() {
     const errors = this.form.controls.guestEmail.errors;
     if (errors?.['required']) {
@@ -1304,20 +1483,6 @@ export class CheckoutPage implements OnInit {
     return 'Revisa el email.';
   }
 
-  guestEmailConfirmErrorMessage() {
-    const errors = this.form.controls.guestEmailConfirm.errors;
-    if (errors?.['required']) {
-      return 'Repeti tu email.';
-    }
-    if (errors?.['email']) {
-      return 'Ingresa un email valido (ej: nombre@dominio.com).';
-    }
-    if (this.form.hasError('guestEmailMismatch')) {
-      return 'Los emails no coinciden.';
-    }
-    return 'Revisa el email.';
-  }
-
   shippingPostalCodeInvalid() {
     const ctrl = this.form.controls.shippingPostalCode;
     const value = typeof ctrl.value === 'string' ? ctrl.value.trim() : '';
@@ -1325,6 +1490,42 @@ export class CheckoutPage implements OnInit {
       return false;
     }
     return ctrl.invalid && (ctrl.touched || this.submitted());
+  }
+
+  private focusFirstInvalidField() {
+    const controlsInOrder: ReadonlyArray<{
+      id: string;
+      invalid: boolean;
+    }> = [
+      { id: 'shippingCity', invalid: this.form.controls.shippingCity.invalid },
+      { id: 'shippingPostalCode', invalid: this.form.controls.shippingPostalCode.invalid },
+      { id: 'guestEmail', invalid: this.form.controls.guestEmail.invalid },
+      { id: 'guestFirstName', invalid: this.form.controls.guestFirstName.invalid },
+      { id: 'guestLastName', invalid: this.form.controls.guestLastName.invalid },
+    ];
+
+    const target = controlsInOrder.find((entry) => entry.invalid);
+    if (!target) {
+      return;
+    }
+
+    const g = globalThis as unknown as { document?: Document; setTimeout?: typeof setTimeout };
+    g.setTimeout?.(() => {
+      const node = g.document?.getElementById(target.id);
+      if (node instanceof HTMLElement) {
+        node.focus();
+      }
+    }, 0);
+  }
+
+  private focusMessage() {
+    const g = globalThis as unknown as { document?: Document; setTimeout?: typeof setTimeout };
+    g.setTimeout?.(() => {
+      const node = g.document?.getElementById('checkout-message');
+      if (node instanceof HTMLElement) {
+        node.focus();
+      }
+    }, 0);
   }
 
   private ensureIdempotencyKey(): string {
