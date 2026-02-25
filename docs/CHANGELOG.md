@@ -2,6 +2,30 @@
 
 Este archivo se actualiza en cada cambio relevante antes de commitear.
 
+## 2026-02-25 11:41:48 -03:00
+
+### Commit tecnico asociado
+- `8827882`
+
+### Alcance
+- Mitigacion explicita de uso de secretos `*.example` en produccion para despliegues Docker.
+
+### Archivos tecnicos
+- `docker-compose.yml`
+- `scripts/docker-api-entrypoint.sh`
+- `README.md`
+
+### Cambios aplicados
+- Se agregaron metadatos de origen de secretos (`SECRET_SOURCE_*`) en `docker-compose.yml` para validacion de runtime.
+- El entrypoint ahora rechaza inicio en `NODE_ENV=production` si detecta origen `*.example` para secretos criticos.
+- Para Mercado Pago, la validacion de origen `*.example` aplica solo cuando `MP_ENV=production`.
+- README actualizado para documentar el rechazo de rutas `*.example` en produccion.
+
+### Validacion ejecutada
+- `npm run test:api` -> OK
+- `npm run build:api` -> OK
+- `docker compose config` -> OK
+
 ## 2026-02-25 11:37:29 -03:00
 
 ### Commit tecnico asociado
