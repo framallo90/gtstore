@@ -2,6 +2,43 @@
 
 Este archivo se actualiza en cada cambio relevante antes de commitear.
 
+## 2026-02-25 12:05:02 -03:00
+
+### Commit tecnico asociado
+- `87670e9`
+
+### Alcance
+- Mejora de conversion en checkout/home: menos friccion, mejor percepcion de velocidad y señales de confianza.
+
+### Archivos tecnicos
+- `storefront/src/app/pages/home.page.ts`
+- `storefront/src/app/pages/checkout.page.ts`
+- `storefront/src/app/pages/cart.page.ts`
+- `storefront/src/app/core/cart.service.ts`
+- `storefront/src/app/core/toast.service.ts`
+- `storefront/src/app/app.html`
+- `styles/theme.scss`
+
+### Cambios aplicados
+- Home:
+  - barra de busqueda prominente en Hero con acceso directo a `catalog?q=...`.
+  - bloque visual de productos destacados en el Hero para reforzar impacto comercial.
+  - categorias rapidas con identificadores visuales (`NEW`, `TOP`, `NOW`).
+  - estado de stock con FOMO visual: `En stock`, `Ultimas unidades`, `Solo quedan X`.
+  - skeleton cards para carga de destacados (elimina salto visual de contenido).
+- Checkout:
+  - `shippingPostalCode` con `inputmode="numeric"` para mejor UX mobile.
+  - autocompletado best-effort de ciudad por CP (no bloqueante; fallback silencioso).
+  - sellos de confianza visibles bajo CTA de pago (`SSL`, `PCI`, `MP`).
+- Carrito:
+  - reemplazo de texto de carga por skeleton loader.
+- Toast de carrito:
+  - ahora admite miniatura de producto para feedback de agregado.
+
+### Validacion ejecutada
+- `npm run test:storefront` -> OK
+- `npm run build:storefront` -> OK
+
 ## 2026-02-25 11:41:48 -03:00
 
 ### Commit tecnico asociado
