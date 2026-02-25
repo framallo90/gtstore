@@ -21,6 +21,11 @@
 				Vista rapida
 			</button>
 			@if (authService.isLoggedIn()) {
+				@if (authService.hasAdminAccess()) {
+					<a class="nav__item nav__item--ghost" [href]="authService.getAdminDashboardUrl()">
+						Panel admin
+					</a>
+				}
 				<a class="nav__item" routerLink="/profile">Perfil</a>
 				<button class="nav__item" type="button" (click)="logout()">Salir</button>
 			} @else {
@@ -128,7 +133,12 @@
 <section class="toast-host" aria-live="polite" aria-relevant="additions">
 	@for (t of toastService.toasts(); track t.id) {
 		<article class="toast toast--{{ t.variant }}">
-			<p class="toast__msg">{{ t.message }}</p>
+			<div class="toast__head">
+				@if (t.thumbnailUrl) {
+					<img class="toast__thumb" [src]="t.thumbnailUrl" [alt]="t.thumbnailAlt || 'Producto'" loading="lazy" />
+				}
+				<p class="toast__msg">{{ t.message }}</p>
+			</div>
 			<div class="toast__actions">
 				@for (a of t.actions; track a.href) {
 					<a class="toast__action" [routerLink]="a.href">{{ a.label }}</a>

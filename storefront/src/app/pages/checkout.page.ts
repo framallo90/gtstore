@@ -16,7 +16,7 @@ import {
 } from '@angular/forms';
 import { Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
-import { debounceTime } from 'rxjs';
+import { debounceTime, distinctUntilChanged } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService } from '../core/api.service';
 import { AnalyticsService } from '../core/analytics.service';
@@ -160,7 +160,7 @@ import type { Order, OrderQuote, PaymentMethod } from '../core/models';
                   formControlName="shippingPostalCode"
                   placeholder="Ej: 2000"
                   autocomplete="postal-code"
-                  inputmode="text"
+                  inputmode="numeric"
                   [attr.aria-invalid]="shippingPostalCodeInvalid()"
                   [attr.aria-errormessage]="shippingPostalCodeInvalid() ? 'checkout-shipping-postal-error' : null"
                 />
@@ -168,6 +168,11 @@ import type { Order, OrderQuote, PaymentMethod } from '../core/models';
                   <p id="checkout-shipping-postal-error" class="field-msg field-msg--error">
                     Codigo postal invalido. Usa 4-8 digitos o formato CPA.
                   </p>
+                }
+                @if (postalLookupLoading()) {
+                  <p class="field-msg field-msg--hint">Buscando ciudad sugerida por CP...</p>
+                } @else if (postalLookupMessage()) {
+                  <p class="field-msg field-msg--hint">{{ postalLookupMessage() }}</p>
                 }
 
                 @if (shippingMapUrl(); as mapUrl) {
@@ -307,6 +312,21 @@ import type { Order, OrderQuote, PaymentMethod } from '../core/models';
                     @if (auth.isLoggedIn()) { Confirmar pedido } @else { Comprar como invitado }
                   </button>
                 </div>
+
+                <ul class="checkout-trust" aria-label="Compra segura">
+                  <li class="checkout-trust__item">
+                    <span class="checkout-trust__icon" aria-hidden="true">SSL</span>
+                    <span>Sitio seguro cifrado</span>
+                  </li>
+                  <li class="checkout-trust__item">
+                    <span class="checkout-trust__icon" aria-hidden="true">PCI</span>
+                    <span>Pagos procesados de forma segura</span>
+                  </li>
+                  <li class="checkout-trust__item">
+                    <span class="checkout-trust__icon" aria-hidden="true">MP</span>
+                    <span>Checkout protegido por Mercado Pago</span>
+                  </li>
+                </ul>
               </section>
             }
 
@@ -493,6 +513,43 @@ import type { Order, OrderQuote, PaymentMethod } from '../core/models';
       color: var(--muted);
     }
 
+    .checkout-trust {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.45rem;
+      margin-top: 0.65rem;
+      padding: 0;
+      list-style: none;
+    }
+
+    .checkout-trust__item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.45rem 0.56rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid hsl(var(--brand-h) 34% 72% / 0.54);
+      background: hsl(0 0% 100% / 0.74);
+      color: var(--muted);
+      font-size: 0.83rem;
+      font-weight: 600;
+    }
+
+    .checkout-trust__icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 2.1rem;
+      height: 1.45rem;
+      border-radius: 999px;
+      border: 1px solid hsl(var(--brand-h) 34% 70% / 0.54);
+      background: hsl(var(--brand-h) 44% 95% / 0.95);
+      color: hsl(var(--brand-h) 38% 22%);
+      font-size: 0.69rem;
+      letter-spacing: 0.04em;
+      font-weight: 700;
+    }
+
     .spinner {
       width: 1rem;
       height: 1rem;
@@ -563,6 +620,8 @@ export class CheckoutPage implements OnInit {
   quote = signal<OrderQuote | null>(null);
   quoteLoading = signal(false);
   quoteError = signal('');
+  postalLookupLoading = signal(false);
+  postalLookupMessage = signal('');
   shippingMapUrl = signal<SafeResourceUrl | null>(null);
   completedOrder = signal<Order | null>(null);
   appliedCoupon = signal<string | undefined>(undefined);
@@ -571,6 +630,8 @@ export class CheckoutPage implements OnInit {
 
   private quoteTimer: number | null = null;
   private quoteSeq = 0;
+  private postalLookupSeq = 0;
+  private lastPostalLookup = '';
   private beginTracked = false;
 
   readonly checkoutSteps = [
@@ -645,7 +706,18 @@ export class CheckoutPage implements OnInit {
       .subscribe(() => {
         this.maybeClearIdempotencyKey();
         this.updateShippingMapUrl();
+        if (this.normalizeShippingCity(this.form.getRawValue().shippingCity)) {
+          this.postalLookupMessage.set('');
+        } else {
+          this.lastPostalLookup = '';
+        }
         this.persistState();
+      });
+
+    this.form.controls.shippingPostalCode.valueChanges
+      .pipe(debounceTime(450), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe((value) => {
+        this.tryCityAutofillByPostalCode(value);
       });
 
     effect(
@@ -1254,6 +1326,126 @@ export class CheckoutPage implements OnInit {
       return undefined;
     }
     return trimmed.slice(0, 10);
+  }
+
+  private normalizePostalCodeForLookup(input: unknown): string | undefined {
+    if (typeof input !== 'string') {
+      return undefined;
+    }
+
+    const trimmed = input.trim().toUpperCase();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    if (/^\d{4,8}$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    const cpa = /^([A-Z])(\d{4})([A-Z]{0,3})$/.exec(trimmed);
+    if (cpa) {
+      return cpa[2];
+    }
+
+    return undefined;
+  }
+
+  private tryCityAutofillByPostalCode(rawPostalCode: unknown) {
+    const cityAlreadyPresent = this.normalizeShippingCity(this.form.controls.shippingCity.value);
+    const lookupPostalCode = this.normalizePostalCodeForLookup(rawPostalCode);
+
+    if (!lookupPostalCode || cityAlreadyPresent) {
+      this.postalLookupLoading.set(false);
+      if (!cityAlreadyPresent) {
+        this.postalLookupMessage.set('');
+      }
+      return;
+    }
+
+    if (lookupPostalCode === this.lastPostalLookup) {
+      return;
+    }
+
+    this.lastPostalLookup = lookupPostalCode;
+    void this.fetchCitySuggestionByPostalCode(lookupPostalCode);
+  }
+
+  private async fetchCitySuggestionByPostalCode(postalCode: string) {
+    const seq = ++this.postalLookupSeq;
+    this.postalLookupLoading.set(true);
+    this.postalLookupMessage.set('');
+
+    const g = globalThis as unknown as {
+      fetch?: typeof fetch;
+      AbortController?: typeof AbortController;
+      setTimeout?: typeof setTimeout;
+      clearTimeout?: typeof clearTimeout;
+    };
+
+    if (!g.fetch) {
+      this.postalLookupLoading.set(false);
+      return;
+    }
+
+    const controller = g.AbortController ? new g.AbortController() : undefined;
+    const timer = g.setTimeout?.(() => controller?.abort(), 3500);
+
+    try {
+      const url =
+        `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1` +
+        `&limit=1&country=Argentina&postalcode=${encodeURIComponent(postalCode)}`;
+
+      const res = await g.fetch(url, {
+        method: 'GET',
+        signal: controller?.signal,
+      });
+
+      if (seq !== this.postalLookupSeq) {
+        return;
+      }
+      if (!res.ok) {
+        this.postalLookupMessage.set('');
+        return;
+      }
+
+      const payload = (await res.json()) as Array<{
+        address?: Record<string, string>;
+      }>;
+      const address = payload?.[0]?.address;
+      const cityCandidate =
+        address?.['city'] ??
+        address?.['town'] ??
+        address?.['village'] ??
+        address?.['municipality'] ??
+        '';
+      const provinceCandidate = address?.['state'] ?? address?.['region'] ?? '';
+      const city = this.normalizeShippingCity(cityCandidate);
+      if (!city) {
+        this.postalLookupMessage.set('');
+        return;
+      }
+
+      if (!this.normalizeShippingCity(this.form.controls.shippingCity.value)) {
+        this.form.controls.shippingCity.setValue(city);
+      }
+
+      this.postalLookupMessage.set(
+        provinceCandidate
+          ? `Sugerencia automatica: ${city}, ${provinceCandidate}.`
+          : `Sugerencia automatica: ${city}.`,
+      );
+    } catch {
+      if (seq === this.postalLookupSeq) {
+        this.postalLookupMessage.set('');
+      }
+    } finally {
+      if (timer) {
+        g.clearTimeout?.(timer);
+      }
+      if (seq === this.postalLookupSeq) {
+        this.postalLookupLoading.set(false);
+      }
+    }
   }
 
   private hasShippingData(city: unknown, postalCode: unknown): boolean {

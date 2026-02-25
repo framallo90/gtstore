@@ -157,6 +157,8 @@ export class CartService {
         this.toast.show({
           variant: 'success',
           message: `Agregado: ${product.title}`,
+          thumbnailUrl: product.coverUrl ?? undefined,
+          thumbnailAlt: product.title,
           actions: [
             { label: 'Ver carrito', href: '/cart' },
             { label: 'Checkout', href: '/checkout' },
@@ -183,6 +185,8 @@ export class CartService {
               this.toast.show({
                 variant: 'success',
                 message: `Agregado: ${product.title}`,
+                thumbnailUrl: product.coverUrl ?? undefined,
+                thumbnailAlt: product.title,
                 actions: [
                   { label: 'Ver carrito', href: '/cart' },
                   { label: 'Checkout', href: '/checkout' },

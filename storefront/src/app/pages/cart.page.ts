@@ -26,7 +26,11 @@ import { AuthService } from '../core/auth.service';
         }
 
         @if (guestLoading()) {
-          <p class="muted">Cargando productos del carrito...</p>
+          <div class="skeleton-list" aria-live="polite" aria-label="Cargando carrito">
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+          </div>
         } @else if (activeLines().length === 0) {
           <p class="muted">Tu carrito esta vacio.</p>
         } @else {

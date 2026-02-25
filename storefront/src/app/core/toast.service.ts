@@ -8,6 +8,8 @@ export type Toast = {
   message: string;
   variant: ToastVariant;
   actions: ToastAction[];
+  thumbnailUrl?: string;
+  thumbnailAlt?: string;
   timeoutMs: number;
 };
 
@@ -19,6 +21,8 @@ export class ToastService {
     message: string;
     variant?: ToastVariant;
     actions?: ToastAction[];
+    thumbnailUrl?: string;
+    thumbnailAlt?: string;
     timeoutMs?: number;
   }) {
     const toast: Toast = {
@@ -26,6 +30,8 @@ export class ToastService {
       message: input.message,
       variant: input.variant ?? 'info',
       actions: input.actions ?? [],
+      thumbnailUrl: input.thumbnailUrl,
+      thumbnailAlt: input.thumbnailAlt,
       timeoutMs: input.timeoutMs ?? 4200,
     };
 
