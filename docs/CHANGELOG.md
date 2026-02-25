@@ -2,6 +2,35 @@
 
 Este archivo se actualiza en cada cambio relevante antes de commitear.
 
+## 2026-02-25 11:06:33 -03:00
+
+### Commit tecnico asociado
+- `d72382b`
+
+### Alcance
+- Mejoras UX/UI y A11y en registro y checkout para reducir friccion.
+
+### Archivos tecnicos
+- `storefront/src/app/pages/checkout.page.ts`
+- `storefront/src/app/pages/register.page.ts`
+
+### Cambios aplicados
+- Checkout invitado:
+  - Eliminado campo "repetir email".
+  - Metodo de pago migrado de `<select>` a radio-cards visuales.
+  - Resumen de compra con miniaturas de producto.
+  - Loading con skeleton y spinner en lugar de texto plano.
+  - `aria-errormessage` en campos clave.
+  - Focus al primer campo invalido y al mensaje general cuando corresponde.
+- Registro:
+  - Eliminados campos "repetir email" y "repetir password".
+  - `aria-errormessage` en nombre, apellido, email y password.
+  - Focus al primer campo invalido y al alerta de error de formulario.
+
+### Validacion ejecutada
+- `npm run test:storefront` -> OK
+- `npm run build:storefront` -> OK
+
 ## 2026-02-25 10:52:00 -03:00
 
 ### Commit tecnico asociado
