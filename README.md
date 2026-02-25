@@ -56,8 +56,12 @@ Opcional (cotizacion de envio con Andreani):
 - `ANDREANI_SENDER_CONTRACT` / `ANDREANI_SENDER_CLIENT`
 - `ANDREANI_SENDER_PROVINCE` / `ANDREANI_SENDER_DISTRICT` / `ANDREANI_SENDER_LOCALITY` / `ANDREANI_SENDER_ZIP_CODE`
 
-Opcional (solo Docker/primer arranque): forzar seed al iniciar contenedor:
-- `RUN_SEED=1`
+Opcional (solo Docker): paths de secretos para sobrescribir los ejemplos de `./.secrets/*.example`:
+- `POSTGRES_PASSWORD_PATH`
+- `JWT_ACCESS_SECRET_PATH`
+- `JWT_REFRESH_SECRET_PATH`
+- `MP_ACCESS_TOKEN_PATH`
+- `MP_WEBHOOK_SECRET_PATH`
 
 Nota: `.env` esta ignorado por git.
 
@@ -114,6 +118,12 @@ Levantar todo:
 docker compose up --build
 ```
 
+Opcional (cargar data inicial manualmente):
+
+```bash
+docker compose run --rm api node prisma/seed.js
+```
+
 Servicios:
 - Storefront: `http://localhost:4200` (Nginx)
 - Admin: `http://localhost:4300` (Nginx)
@@ -122,9 +132,10 @@ Servicios:
 - Swagger: `http://localhost:3000/api/docs`
 - PostgreSQL: `127.0.0.1:5433` (solo accesible desde el host local)
 
-Nota: `docker-compose.yml` usa variables desde tu `.env` (JWT secrets, admin seed, Postgres).
+Nota: `docker-compose.yml` monta secretos por archivo (`/run/secrets/*`) y evita inyectarlos como variables planas.
+Para desarrollo rapido, usa los ejemplos en `./.secrets/*.example` y reemplazalos con secretos reales antes de produccion.
 
-Nota: el contenedor `api` ejecuta `prisma migrate deploy` al iniciar. El seed corre automaticamente solo fuera de produccion (`NODE_ENV!=production`). En produccion, `RUN_SEED=1` se ignora por seguridad.
+Nota: el contenedor `api` ejecuta `prisma migrate deploy` al iniciar. El seed ya no corre automaticamente.
 
 Nota: en production Swagger se deshabilita por defecto; si queres habilitarlo setea `SWAGGER_ENABLED=1`.
 
@@ -132,26 +143,34 @@ Nota: en production Swagger se deshabilita por defecto; si queres habilitarlo se
 
 - Setear `NODE_ENV=production`.
 - Usar HTTPS (requerido para cookies `secure` del refresh token).
-- Secretos: no dejar credenciales sensibles en texto plano. Preferir Docker secrets o un secret manager.
+- Secretos:
+  - No usar variables planas para credenciales de runtime.
+  - Configurar paths de secretos reales (`*_PATH`) o secret manager externo.
 - Configurar `CORS_ORIGINS` con tus dominios reales (storefront/admin).
 - Configurar `TRUST_PROXY` segun tu red:
   - API expuesta directo (recomendado por defecto): `TRUST_PROXY=0`.
   - Detras de nginx/reverse proxy: `TRUST_PROXY=1` (o hop count estricto).
   - Asegurar que el proxy sanitice `X-Forwarded-For` (no confiar headers del cliente).
+  - Si usas proxy en produccion, setear tambien:
+    - `EXPECT_REVERSE_PROXY=1`
+    - `PROXY_SANITIZES_XFF=1`
+- Swagger:
+  - Mantener `SWAGGER_ENABLED` vacio o en `0`.
+  - Si excepcionalmente se habilita en prod, requiere `SWAGGER_PRODUCTION_ALLOWED=1`.
 - Emails reales:
   - `EMAIL_DRIVER=smtp` + `EMAIL_FROM` + `SMTP_*`.
 - Mercado Pago real:
   - `MP_ENV=production`
-  - `MP_ACCESS_TOKEN` (solo backend)
+  - `MP_ACCESS_TOKEN` (via secret file en Docker)
   - `STORE_BASE_URL` con tu dominio publico
   - `MP_NOTIFICATION_URL` debe ser publico (webhook).
-  - `MP_WEBHOOK_SECRET` para validar firma de webhooks entrantes.
+  - `MP_WEBHOOK_SECRET` (via secret file) para validar firma de webhooks entrantes.
 - Envio Andreani:
   - Activar `ANDREANI_ENABLED=true`.
   - Completar credenciales y datos de origen (`ANDREANI_*`).
   - El checkout toma `Ciudad + Codigo postal` para cotizar y sumar envio al total.
 - Primer arranque (opcional):
-  - En produccion: crear admin manualmente (no por seed automatico de contenedor).
+  - Crear admin manualmente ejecutando seed de forma controlada.
   - En local/dev: si usas seed, configurar `ADMIN_EMAIL`/`ADMIN_PASSWORD` fuertes.
 - Backups:
   - Respaldar el volumen `postgres_data` (o usar un Postgres administrado).

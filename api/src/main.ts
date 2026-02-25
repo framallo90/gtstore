@@ -5,12 +5,44 @@ import cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common';
 import { json, urlencoded, type NextFunction, type Request, type Response } from 'express';
 import { randomUUID } from 'crypto';
+import { readFileSync } from 'fs';
 import { AppModule } from './app/app.module';
 
 type RequestWithId = { requestId?: string };
 
 function isProductionEnv() {
   return (process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production';
+}
+
+function loadSecretEnvFromFile(varName: string) {
+  const existing = (process.env[varName] ?? '').trim();
+  if (existing) {
+    return;
+  }
+
+  const filePath = (process.env[`${varName}_FILE`] ?? '').trim();
+  if (!filePath) {
+    return;
+  }
+
+  let value = '';
+  try {
+    value = readFileSync(filePath, 'utf8').trim();
+  } catch {
+    throw new Error(`Failed to read ${varName}_FILE from path: ${filePath}`);
+  }
+
+  if (value) {
+    process.env[varName] = value;
+  }
+}
+
+function hydrateSecretsFromFiles() {
+  loadSecretEnvFromFile('POSTGRES_PASSWORD');
+  loadSecretEnvFromFile('JWT_ACCESS_SECRET');
+  loadSecretEnvFromFile('JWT_REFRESH_SECRET');
+  loadSecretEnvFromFile('MP_ACCESS_TOKEN');
+  loadSecretEnvFromFile('MP_WEBHOOK_SECRET');
 }
 
 function assertRuntimeSecurityConfig() {
@@ -34,6 +66,39 @@ function assertRuntimeSecurityConfig() {
   const corsRaw = (process.env.CORS_ORIGINS ?? '').trim();
   if (!corsRaw) {
     throw new Error('CORS_ORIGINS is required in production');
+  }
+
+  const trustProxyRaw = process.env.TRUST_PROXY;
+  const trustProxy =
+    trustProxyRaw === undefined ? 0 : Number(parseTrustProxySetting(trustProxyRaw));
+  const expectReverseProxy = (process.env.EXPECT_REVERSE_PROXY ?? '').trim() === '1';
+  const proxySanitizesXff = (process.env.PROXY_SANITIZES_XFF ?? '').trim() === '1';
+  if (expectReverseProxy && trustProxy <= 0) {
+    throw new Error('EXPECT_REVERSE_PROXY=1 requires TRUST_PROXY > 0');
+  }
+  if (!expectReverseProxy && trustProxy > 0) {
+    throw new Error('TRUST_PROXY > 0 requires EXPECT_REVERSE_PROXY=1');
+  }
+  if (trustProxy > 0 && !proxySanitizesXff) {
+    throw new Error('TRUST_PROXY > 0 requires PROXY_SANITIZES_XFF=1 in production');
+  }
+
+  const swaggerFlag = (process.env.SWAGGER_ENABLED ?? '').trim().toLowerCase();
+  const swaggerAllowedInProd = (process.env.SWAGGER_PRODUCTION_ALLOWED ?? '').trim() === '1';
+  const swaggerEnabledInProd = swaggerFlag === '1' || swaggerFlag === 'true';
+  if (swaggerEnabledInProd && !swaggerAllowedInProd) {
+    throw new Error('SWAGGER_ENABLED in production requires SWAGGER_PRODUCTION_ALLOWED=1');
+  }
+
+  const weakSecretValues = new Set([
+    'changeme',
+    'change_me',
+    'change_me_dev_only',
+    'change_me_dev_only_min_32_chars_1234567890',
+    'change_me_dev_only_min_32_chars_0987654321',
+  ]);
+  if (weakSecretValues.has(accessSecret.toLowerCase()) || weakSecretValues.has(refreshSecret.toLowerCase())) {
+    throw new Error('Weak JWT secrets are not allowed in production.');
   }
 
   const weakAdminEmail = (process.env.ADMIN_EMAIL ?? '').trim().toLowerCase() === 'admin';
@@ -114,6 +179,7 @@ function sanitizePath(input: string | undefined): string {
 }
 
 async function bootstrap() {
+  hydrateSecretsFromFiles();
   assertRuntimeSecurityConfig();
 
   // Disable Nest default body parser so we can apply explicit limits.

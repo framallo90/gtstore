@@ -25,7 +25,8 @@ RUN DATABASE_URL="postgresql://user:password@localhost:5432/db?schema=public" np
 
 COPY --from=builder /app/dist/api/main.js ./main.js
 COPY --from=builder /app/dist/api/assets ./assets
+COPY scripts/docker-api-entrypoint.sh ./docker-api-entrypoint.sh
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "set -e; npx prisma migrate deploy; if [ \"$NODE_ENV\" != \"production\" ]; then node prisma/seed.js; elif [ \"$RUN_SEED\" = \"1\" ]; then echo \"[security] RUN_SEED=1 ignored in production\"; fi; node main.js"]
+CMD ["sh", "./docker-api-entrypoint.sh"]

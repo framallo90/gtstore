@@ -5,12 +5,14 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_DB: ${POSTGRES_DB:-geekytreasures}
     ports:
       - '127.0.0.1:5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    secrets:
+      - postgres_password
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
       interval: 5s
@@ -29,20 +31,22 @@ services:
     environment:
       # Local: keep cookies working over plain HTTP. Production: set NODE_ENV=production + use HTTPS.
       NODE_ENV: ${NODE_ENV:-development}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-geekytreasures}?schema=public
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-geekytreasures}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      JWT_ACCESS_SECRET_FILE: /run/secrets/jwt_access_secret
+      JWT_REFRESH_SECRET_FILE: /run/secrets/jwt_refresh_secret
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:4300}
       PORT: ${PORT:-3000}
       TRUST_PROXY: ${TRUST_PROXY:-0}
+      EXPECT_REVERSE_PROXY: ${EXPECT_REVERSE_PROXY:-0}
+      PROXY_SANITIZES_XFF: ${PROXY_SANITIZES_XFF:-0}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-}
-      # Optional: used only by prisma seed to create an admin user in local environments.
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
-      # Optional: force seed execution at container start (recommended only for local/first-run).
-      RUN_SEED: ${RUN_SEED:-}
+      SWAGGER_PRODUCTION_ALLOWED: ${SWAGGER_PRODUCTION_ALLOWED:-0}
       # Emails transaccionales (optional)
       EMAIL_DRIVER: ${EMAIL_DRIVER:-log}
       EMAIL_FROM: ${EMAIL_FROM:-}
@@ -52,22 +56,22 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       # Mercado Pago (optional)
-      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:-}
+      MP_ACCESS_TOKEN_FILE: /run/secrets/mp_access_token
       MP_ENV: ${MP_ENV:-sandbox}
       MP_CURRENCY_ID: ${MP_CURRENCY_ID:-USD}
       STORE_BASE_URL: ${STORE_BASE_URL:-http://localhost:4200}
       MP_NOTIFICATION_URL: ${MP_NOTIFICATION_URL:-}
-      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-}
+      MP_WEBHOOK_SECRET_FILE: /run/secrets/mp_webhook_secret
+    secrets:
+      - postgres_password
+      - jwt_access_secret
+      - jwt_refresh_secret
+      - mp_access_token
+      - mp_webhook_secret
     ports:
       - '3000:3000'
     healthcheck:
-      test:
-        [
-          'CMD',
-          'node',
-          '-e',
-          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1']
       interval: 10s
       timeout: 3s
       retries: 30
@@ -98,3 +102,15 @@ services:
 
 volumes:
   postgres_data:
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_PATH:-./.secrets/postgres_password.example}
+  jwt_access_secret:
+    file: ${JWT_ACCESS_SECRET_PATH:-./.secrets/jwt_access_secret.example}
+  jwt_refresh_secret:
+    file: ${JWT_REFRESH_SECRET_PATH:-./.secrets/jwt_refresh_secret.example}
+  mp_access_token:
+    file: ${MP_ACCESS_TOKEN_PATH:-./.secrets/mp_access_token.example}
+  mp_webhook_secret:
+    file: ${MP_WEBHOOK_SECRET_PATH:-./.secrets/mp_webhook_secret.example}
