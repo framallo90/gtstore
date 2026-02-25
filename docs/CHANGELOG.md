@@ -2,6 +2,47 @@
 
 Este archivo se actualiza en cada cambio relevante antes de commitear.
 
+## 2026-02-25 11:26:50 -03:00
+
+### Commit tecnico asociado
+- `a5cf90b`
+
+### Alcance
+- Hardening de infraestructura Docker para secretos y configuracion de proxy.
+
+### Archivos tecnicos
+- `docker-compose.yml`
+- `Dockerfile.api`
+- `scripts/docker-api-entrypoint.sh`
+- `api/src/main.ts`
+- `.env.example`
+- `README.md`
+- `.secrets/README.md`
+- `.secrets/postgres_password.example`
+- `.secrets/jwt_access_secret.example`
+- `.secrets/jwt_refresh_secret.example`
+- `.secrets/mp_access_token.example`
+- `.secrets/mp_webhook_secret.example`
+
+### Cambios aplicados
+- Migracion de `docker-compose` a secretos por archivo (`/run/secrets/*`) para Postgres/API.
+- Eliminacion de secretos sensibles en variables planas dentro del servicio `api`.
+- Entrypoint de API dedicado:
+  - carga secretos desde `*_FILE`.
+  - construye `DATABASE_URL` en runtime cuando no viene seteado.
+  - ejecuta migraciones y arranca API sin seed automatico.
+- Endurecimiento de runtime:
+  - validacion explicita de `TRUST_PROXY` + `EXPECT_REVERSE_PROXY` + `PROXY_SANITIZES_XFF` en produccion.
+  - bloqueo de Swagger en produccion salvo `SWAGGER_PRODUCTION_ALLOWED=1`.
+  - soporte de carga de secretos desde `*_FILE` en arranque.
+- Healthcheck de API optimizado con `wget` en lugar de invocar Node cada ciclo.
+- Agregado set de archivos `.secrets/*.example` y guia operativa para no versionar secretos reales.
+
+### Validacion ejecutada
+- `npm run test:api` -> OK
+- `npm run build:api` -> OK
+- `docker compose config` -> OK
+
 ## 2026-02-25 11:06:33 -03:00
 
 ### Commit tecnico asociado
