@@ -52,23 +52,24 @@ function getClientIp(req: { ip?: string; socket?: { remoteAddress?: string | nul
   return req.socket?.remoteAddress ?? 'unknown';
 }
 
-function parseTrustProxySetting(raw: string): boolean | number | string {
+function parseTrustProxySetting(raw: string): boolean | number {
   const v = raw.trim();
   if (!v) {
     return 0;
   }
   const lower = v.toLowerCase();
   if (lower === 'true') {
-    return true;
+    // Avoid trust-all mode from ambiguous boolean config.
+    return 1;
   }
   if (lower === 'false') {
-    return false;
+    return 0;
   }
   const n = Number(v);
-  if (Number.isFinite(n)) {
+  if (Number.isFinite(n) && n >= 0) {
     return n;
   }
-  return v;
+  return 0;
 }
 
 function normalizeRequestId(input: unknown): string | undefined {

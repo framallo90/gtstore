@@ -28,4 +28,4 @@ COPY --from=builder /app/dist/api/assets ./assets
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "set -e; npx prisma migrate deploy; if [ \"$RUN_SEED\" = \"1\" ] || [ \"$NODE_ENV\" != \"production\" ]; then node prisma/seed.js; fi; node main.js"]
+CMD ["sh", "-c", "set -e; npx prisma migrate deploy; if [ \"$NODE_ENV\" != \"production\" ]; then node prisma/seed.js; elif [ \"$RUN_SEED\" = \"1\" ]; then echo \"[security] RUN_SEED=1 ignored in production\"; fi; node main.js"]

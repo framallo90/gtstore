@@ -118,12 +118,13 @@ Servicios:
 - Storefront: `http://localhost:4200` (Nginx)
 - Admin: `http://localhost:4300` (Nginx)
 - API: `http://localhost:3000/api`
+- Health API: `http://localhost:3000/api/health`
 - Swagger: `http://localhost:3000/api/docs`
-- PostgreSQL: `localhost:5433`
+- PostgreSQL: `127.0.0.1:5433` (solo accesible desde el host local)
 
 Nota: `docker-compose.yml` usa variables desde tu `.env` (JWT secrets, admin seed, Postgres).
 
-Nota: el contenedor `api` ejecuta `prisma migrate deploy` al iniciar. El seed corre automaticamente en local (`NODE_ENV!=production`) o si seteas `RUN_SEED=1` (recomendado solo para primer arranque/local).
+Nota: el contenedor `api` ejecuta `prisma migrate deploy` al iniciar. El seed corre automaticamente solo fuera de produccion (`NODE_ENV!=production`). En produccion, `RUN_SEED=1` se ignora por seguridad.
 
 Nota: en production Swagger se deshabilita por defecto; si queres habilitarlo setea `SWAGGER_ENABLED=1`.
 
@@ -131,10 +132,12 @@ Nota: en production Swagger se deshabilita por defecto; si queres habilitarlo se
 
 - Setear `NODE_ENV=production`.
 - Usar HTTPS (requerido para cookies `secure` del refresh token).
+- Secretos: no dejar credenciales sensibles en texto plano. Preferir Docker secrets o un secret manager.
 - Configurar `CORS_ORIGINS` con tus dominios reales (storefront/admin).
 - Configurar `TRUST_PROXY` segun tu red:
   - API expuesta directo (recomendado por defecto): `TRUST_PROXY=0`.
   - Detras de nginx/reverse proxy: `TRUST_PROXY=1` (o hop count estricto).
+  - Asegurar que el proxy sanitice `X-Forwarded-For` (no confiar headers del cliente).
 - Emails reales:
   - `EMAIL_DRIVER=smtp` + `EMAIL_FROM` + `SMTP_*`.
 - Mercado Pago real:
@@ -148,8 +151,8 @@ Nota: en production Swagger se deshabilita por defecto; si queres habilitarlo se
   - Completar credenciales y datos de origen (`ANDREANI_*`).
   - El checkout toma `Ciudad + Codigo postal` para cotizar y sumar envio al total.
 - Primer arranque (opcional):
-  - Para crear admin automaticamente, setear `ADMIN_EMAIL`/`ADMIN_PASSWORD` y correr con `RUN_SEED=1` solo una vez.
-  - Luego volver `RUN_SEED=0` (y mantener `NODE_ENV=production`).
+  - En produccion: crear admin manualmente (no por seed automatico de contenedor).
+  - En local/dev: si usas seed, configurar `ADMIN_EMAIL`/`ADMIN_PASSWORD` fuertes.
 - Backups:
   - Respaldar el volumen `postgres_data` (o usar un Postgres administrado).
 
