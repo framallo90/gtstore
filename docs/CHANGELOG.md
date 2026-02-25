@@ -2,6 +2,36 @@
 
 Este archivo se actualiza en cada cambio relevante antes de commitear.
 
+## 2026-02-25 11:37:29 -03:00
+
+### Commit tecnico asociado
+- `3a84f5f`
+
+### Alcance
+- Endurecimiento adicional de defaults de despliegue para evitar configuraciones inseguras por omision.
+
+### Archivos tecnicos
+- `docker-compose.yml`
+- `scripts/docker-api-entrypoint.sh`
+- `api/src/main.ts`
+- `.env.example`
+- `README.md`
+
+### Cambios aplicados
+- API publicada solo en loopback del host: `127.0.0.1:3000:3000`.
+- `NODE_ENV` default de Docker Compose cambiado a `production`.
+- EntryPoint de API:
+  - valida en produccion que `POSTGRES_PASSWORD`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` no sean placeholders.
+  - valida longitud minima de secretos JWT (>= 32) en runtime.
+  - si `MP_ENV=production`, exige `MP_ACCESS_TOKEN` y `MP_WEBHOOK_SECRET` no-placeholder.
+- Validacion adicional en `api/src/main.ts` para secretos JWT cortos en produccion.
+- README y `.env.example` actualizados para reflejar defaults y comportamiento seguro.
+
+### Validacion ejecutada
+- `npm run test:api` -> OK
+- `npm run build:api` -> OK
+- `docker compose config` -> OK
+
 ## 2026-02-25 11:26:50 -03:00
 
 ### Commit tecnico asociado
