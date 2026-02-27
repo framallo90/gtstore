@@ -1,11 +1,12 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { ApiService } from '../core/api.service';
-import { Order, UserProfile } from '../core/models';
+import { Order, UserProfile, WishlistItem } from '../core/models';
 
 @Component({
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   template: `
     <section class="page-stack">
       <header class="card page-header panel">
@@ -61,6 +62,28 @@ import { Order, UserProfile } from '../core/models';
           </ul>
         }
       </section>
+
+      <section class="card panel panel--wide">
+        <h3>Mis favoritos</h3>
+        @if (wishlist().length === 0) {
+          <p class="muted">Todavia no guardaste productos.</p>
+        } @else {
+          <ul class="admin-list">
+            @for (item of wishlist(); track item.id) {
+              <li class="admin-list__item">
+                <div class="admin-list__main">
+                  <strong>{{ item.product.title }}</strong>
+                  <span class="muted">{{ item.product.price }} USD</span>
+                  <span class="muted">Guardado: {{ item.createdAt | date: 'yyyy-MM-dd' }}</span>
+                </div>
+                <div class="admin-list__actions">
+                  <a [routerLink]="['/products', item.productId]">Ver detalle</a>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </section>
     </section>
   `,
 })
@@ -69,9 +92,11 @@ export class ProfilePage implements OnInit {
 
   profile = signal<UserProfile | null>(null);
   orders = signal<Order[]>([]);
+  wishlist = signal<WishlistItem[]>([]);
 
   ngOnInit() {
     this.api.me().subscribe((res) => this.profile.set(res));
     this.api.myOrders().subscribe((res) => this.orders.set(res));
+    this.api.getWishlist().subscribe((res) => this.wishlist.set(res));
   }
 }

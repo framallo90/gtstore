@@ -19,7 +19,11 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "node prisma/seed.js"
+    "prisma:seed": "node prisma/seed.js",
+    "docker:rebuild:storefront": "powershell -ExecutionPolicy Bypass -File scripts/docker-local-build.ps1 -Target storefront",
+    "docker:rebuild:admin": "powershell -ExecutionPolicy Bypass -File scripts/docker-local-build.ps1 -Target admin",
+    "docker:rebuild:api": "powershell -ExecutionPolicy Bypass -File scripts/docker-local-build.ps1 -Target api",
+    "docker:rebuild:all": "powershell -ExecutionPolicy Bypass -File scripts/docker-local-build.ps1 -Target all"
   },
   "private": true,
   "devDependencies": {

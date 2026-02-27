@@ -14,13 +14,13 @@ import { AdminAuthService } from '../core/admin-auth.service';
       <div class="card panel panel--auth">
         <h2>Panel de administracion</h2>
         <form [formGroup]="form" (ngSubmit)="submit()">
-          <label for="email">Email</label>
+          <label for="email">Usuario admin o email</label>
           <input
             id="email"
-            type="email"
+            type="text"
             formControlName="email"
-            autocomplete="email"
-            inputmode="email"
+            autocomplete="username"
+            inputmode="text"
             [attr.aria-invalid]="emailInvalid()"
           />
           @if (emailInvalid()) {
@@ -80,7 +80,7 @@ export class AdminLoginPage {
   showPassword = signal(false);
 
   form = this.fb.nonNullable.group({
-    email: ['', [Validators.required, Validators.email]],
+    email: ['', [Validators.required]],
     password: ['', [Validators.required, Validators.minLength(8)]],
   });
 
@@ -142,12 +142,9 @@ export class AdminLoginPage {
       return 'Revisa el email.';
     }
     if (errors['required']) {
-      return 'Ingresa tu email.';
+      return 'Ingresa tu usuario admin o email.';
     }
-    if (errors['email']) {
-      return 'Ingresa un email valido (ej: nombre@dominio.com).';
-    }
-    return 'Revisa el email.';
+    return 'Revisa el identificador.';
   }
 
   passwordErrorMessage() {

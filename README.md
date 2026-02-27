@@ -118,6 +118,15 @@ Levantar todo:
 docker compose up --build
 ```
 
+Rebuild rapido por servicio (Docker local, leyendo secretos desde `.env`):
+
+```bash
+npm run docker:rebuild:storefront
+npm run docker:rebuild:admin
+npm run docker:rebuild:api
+npm run docker:rebuild:all
+```
+
 Opcional (cargar data inicial manualmente):
 
 ```bash

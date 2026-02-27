@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import type {
   AdminDashboardSummary,
   AdminAnalyticsSummary,
+  AdminSiteContent,
   CachedError,
   AuditLog,
   AdminOrder,
@@ -47,12 +48,38 @@ export class AdminApiService {
 
   createProduct(payload: {
     title: string;
+    subtitle?: string;
     description: string;
     author: string;
     publisher?: string;
+    genre?: string;
+    seriesName?: string;
+    seriesNumber?: number;
+    language?: string;
+    binding?: string;
+    edition?: string;
+    translator?: string;
+    illustrator?: string;
+    narrator?: string;
+    editor?: string;
+    originCountry?: string;
     isbn?: string;
+    isbn10?: string;
+    isbn13?: string;
+    ean?: string;
     sku: string;
     type: ProductType;
+    publicationYear?: number;
+    publicationDate?: string;
+    pageCount?: number;
+    dimensions?: string;
+    heightCm?: number;
+    widthCm?: number;
+    thicknessCm?: number;
+    weightGrams?: number;
+    conditionLabel?: string;
+    shippingEtaMinDays?: number;
+    shippingEtaMaxDays?: number;
     price: number;
     stock: number;
     coverUrl?: string;
@@ -66,12 +93,38 @@ export class AdminApiService {
     id: string,
     payload: Partial<{
       title: string;
+      subtitle?: string;
       description: string;
       author: string;
       publisher?: string;
+      genre?: string;
+      seriesName?: string;
+      seriesNumber?: number;
+      language?: string;
+      binding?: string;
+      edition?: string;
+      translator?: string;
+      illustrator?: string;
+      narrator?: string;
+      editor?: string;
+      originCountry?: string;
       isbn?: string;
+      isbn10?: string;
+      isbn13?: string;
+      ean?: string;
       sku: string;
       type: ProductType;
+      publicationYear?: number;
+      publicationDate?: string;
+      pageCount?: number;
+      dimensions?: string;
+      heightCm?: number;
+      widthCm?: number;
+      thicknessCm?: number;
+      weightGrams?: number;
+      conditionLabel?: string;
+      shippingEtaMinDays?: number;
+      shippingEtaMaxDays?: number;
       price: number;
       stock: number;
       coverUrl?: string;
@@ -102,6 +155,25 @@ export class AdminApiService {
     return this.http.patch<AdminUser>(`${this.baseUrl}/users/${id}/role`, { role });
   }
 
+  updateUser(
+    id: string,
+    payload: Partial<{
+      email: string;
+      firstName: string;
+      lastName: string;
+      role: Role;
+      password: string;
+    }>,
+  ) {
+    return this.http.patch<AdminUser>(`${this.baseUrl}/users/${id}`, payload);
+  }
+
+  deleteUser(id: string) {
+    return this.http.delete<{ success: boolean; deactivatedUser: AdminUser }>(
+      `${this.baseUrl}/users/${id}`,
+    );
+  }
+
   recentErrors(limit = 20) {
     const safe = Math.max(1, Math.min(200, Math.trunc(limit)));
     return this.http.get<{ items: CachedError[] }>(
@@ -114,5 +186,13 @@ export class AdminApiService {
     return this.http.get<{ items: AuditLog[] }>(
       `${this.baseUrl}/audit/recent?limit=${encodeURIComponent(String(safe))}`,
     );
+  }
+
+  getSiteContent() {
+    return this.http.get<AdminSiteContent>(`${this.baseUrl}/site-content/admin`);
+  }
+
+  updateSiteContent(payload: Partial<AdminSiteContent>) {
+    return this.http.put<AdminSiteContent>(`${this.baseUrl}/site-content/admin`, payload);
   }
 }

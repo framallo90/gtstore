@@ -225,6 +225,7 @@ async function bootstrap() {
   const windowMs = 60_000;
   const authMaxPerWindow = 15;
   const analyticsMaxPerWindow = 120;
+  const expensiveEndpointMaxPerWindow = 30;
   const purgeIntervalMs = 5 * 60_000;
   let lastPurge = Date.now();
 
@@ -255,8 +256,13 @@ async function bootstrap() {
       method === 'POST' &&
       (path.startsWith('/api/analytics/events') ||
         path.startsWith('/api/analytics/events/batch'));
+    const isExpensiveEndpoint =
+      method === 'POST' &&
+      (path.startsWith('/api/products/lookup') ||
+        path.startsWith('/api/orders/guest/quote') ||
+        path.startsWith('/api/orders/guest/checkout'));
 
-    if (!isAuth && !isAnalytics) {
+    if (!isAuth && !isAnalytics && !isExpensiveEndpoint) {
       next();
       return;
     }
@@ -271,7 +277,11 @@ async function bootstrap() {
     }
 
     current.count += 1;
-    const maxAllowed = isAuth ? authMaxPerWindow : analyticsMaxPerWindow;
+    const maxAllowed = isAuth
+      ? authMaxPerWindow
+      : isAnalytics
+        ? analyticsMaxPerWindow
+        : expensiveEndpointMaxPerWindow;
     if (current.count > maxAllowed) {
       res.status(429).json({
         statusCode: 429,

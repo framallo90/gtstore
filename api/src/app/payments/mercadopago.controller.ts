@@ -220,6 +220,15 @@ export class MercadoPagoController {
     if (!signature?.ts || !signature?.v1 || !requestId || typeof requestId !== 'string') {
       return false;
     }
+    const signatureEpochSeconds = this.parseSignatureEpochSeconds(signature.ts);
+    if (!signatureEpochSeconds) {
+      return false;
+    }
+    // Reject stale/early signatures to reduce replay window.
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (Math.abs(nowSeconds - signatureEpochSeconds) > 300) {
+      return false;
+    }
 
     const dataIdFromQuery = (req.query as Record<string, unknown>)['data.id'];
     const dataIdRaw =
@@ -245,6 +254,18 @@ export class MercadoPagoController {
     }
 
     return timingSafeEqual(expected, provided);
+  }
+
+  private parseSignatureEpochSeconds(rawTs: string): number | undefined {
+    const value = rawTs.trim();
+    if (!/^\d{1,20}$/.test(value)) {
+      return undefined;
+    }
+    const asNumber = Number(value);
+    if (!Number.isFinite(asNumber) || asNumber <= 0) {
+      return undefined;
+    }
+    return Math.floor(asNumber);
   }
 
   private parseSignatureHeader(
@@ -334,11 +355,22 @@ export class MercadoPagoController {
         payerEmail: input.payerEmail,
         notificationUrl: webhookUrl || undefined,
         backUrls,
-        items: order.items.map((i) => ({
-          title: i.productName,
-          quantity: i.quantity,
-          unitPrice: Number(i.unitPrice),
-        })),
+        items: [
+          ...order.items.map((i) => ({
+            title: i.productName,
+            quantity: i.quantity,
+            unitPrice: Number(i.unitPrice),
+          })),
+          ...(Number(order.shippingCost ?? 0) > 0
+            ? [
+                {
+                  title: `Envio ${order.shippingProvider ?? 'Andreani'}`,
+                  quantity: 1,
+                  unitPrice: Number(order.shippingCost),
+                },
+              ]
+            : []),
+        ],
       },
       { idempotencyKey: `gt-mp-pref:${order.id}` },
     );

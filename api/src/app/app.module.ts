@@ -15,6 +15,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { AuditModule } from './audit/audit.module';
 import { PaymentsModule } from './payments/payments.module';
+import { SiteContentModule } from './site-content/site-content.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { PaymentsModule } from './payments/payments.module';
     ObservabilityModule,
     AuditModule,
     PaymentsModule,
+    SiteContentModule,
   ],
   controllers: [AppController],
   providers: [

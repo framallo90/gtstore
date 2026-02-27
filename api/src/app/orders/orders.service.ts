@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { DiscountType, OrderStatus, PaymentMethod, Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
@@ -12,6 +13,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateGuestOrderDto } from './dto/create-guest-order.dto';
 import { GuestQuoteDto } from './dto/guest-quote.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { AndreaniShippingService } from './andreani-shipping.service';
 
 @Injectable()
 export class OrdersService {
@@ -20,6 +22,8 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
+    @Optional()
+    private readonly andreaniShipping?: AndreaniShippingService,
   ) {}
 
   async createFromCart(
@@ -35,6 +39,12 @@ export class OrdersService {
         couponCode: typeof dto.couponCode === 'string' ? dto.couponCode.trim().toUpperCase() : '',
         paymentMethod: dto.paymentMethod ?? '',
         notes: typeof dto.notes === 'string' ? dto.notes : '',
+        shippingCity:
+          typeof dto.shippingCity === 'string' ? dto.shippingCity.trim() : '',
+        shippingPostalCode:
+          typeof dto.shippingPostalCode === 'string'
+            ? dto.shippingPostalCode.trim().toUpperCase()
+            : '',
       },
     });
 
@@ -143,7 +153,21 @@ export class OrdersService {
           couponCode = coupon.code;
         }
 
-        const total = subtotal - discount;
+        const shippingQuote = await this.quoteShippingFromItems({
+          shippingCity: dto.shippingCity,
+          shippingPostalCode: dto.shippingPostalCode,
+          declaredValue: subtotal - discount,
+          items: cartItems.map((item) => ({
+            quantity: item.quantity,
+            weightGrams: item.product.weightGrams,
+            heightCm: item.product.heightCm,
+            widthCm: item.product.widthCm,
+            depthCm: item.product.thicknessCm,
+          })),
+        });
+
+        const shippingCost = shippingQuote?.amount ?? 0;
+        const total = subtotal - discount + shippingCost;
 
         // Atomic stock decrement prevents over-selling under concurrent checkouts.
         for (const item of cartItems) {
@@ -197,6 +221,10 @@ export class OrdersService {
           data: {
             userId,
             paymentMethod: dto.paymentMethod,
+            shippingProvider: shippingQuote?.provider ?? null,
+            shippingCity: shippingQuote?.city ?? null,
+            shippingPostalCode: shippingQuote?.postalCode ?? null,
+            shippingCost,
             subtotal,
             discount,
             total,
@@ -300,10 +328,29 @@ export class OrdersService {
       incrementUsage: false,
     });
 
+    const shippingQuote = await this.quoteShippingFromItems({
+      shippingCity: dto.shippingCity,
+      shippingPostalCode: dto.shippingPostalCode,
+      declaredValue: subtotal - discount,
+      items: cartItems.map((item) => ({
+        quantity: item.quantity,
+        weightGrams: item.product.weightGrams,
+        heightCm: item.product.heightCm,
+        widthCm: item.product.widthCm,
+        depthCm: item.product.thicknessCm,
+      })),
+    });
+
+    const shippingCost = shippingQuote?.amount ?? 0;
+
     return {
       subtotal,
       discount,
-      total: subtotal - discount,
+      shippingCost,
+      shippingProvider: shippingQuote?.provider,
+      shippingCity: shippingQuote?.city,
+      shippingPostalCode: shippingQuote?.postalCode,
+      total: subtotal - discount + shippingCost,
       couponCode,
     };
   }
@@ -340,10 +387,32 @@ export class OrdersService {
       incrementUsage: false,
     });
 
+    const shippingQuote = await this.quoteShippingFromItems({
+      shippingCity: dto.shippingCity,
+      shippingPostalCode: dto.shippingPostalCode,
+      declaredValue: subtotal - discount,
+      items: merged.map((item) => {
+        const product = byId.get(item.productId);
+        return {
+          quantity: item.quantity,
+          weightGrams: product?.weightGrams,
+          heightCm: product?.heightCm,
+          widthCm: product?.widthCm,
+          depthCm: product?.thicknessCm,
+        };
+      }),
+    });
+
+    const shippingCost = shippingQuote?.amount ?? 0;
+
     return {
       subtotal,
       discount,
-      total: subtotal - discount,
+      shippingCost,
+      shippingProvider: shippingQuote?.provider,
+      shippingCity: shippingQuote?.city,
+      shippingPostalCode: shippingQuote?.postalCode,
+      total: subtotal - discount + shippingCost,
       couponCode,
     };
   }
@@ -376,6 +445,12 @@ export class OrdersService {
         couponCode: typeof dto.couponCode === 'string' ? dto.couponCode.trim().toUpperCase() : '',
         paymentMethod: dto.paymentMethod ?? '',
         notes: typeof dto.notes === 'string' ? dto.notes : '',
+        shippingCity:
+          typeof dto.shippingCity === 'string' ? dto.shippingCity.trim() : '',
+        shippingPostalCode:
+          typeof dto.shippingPostalCode === 'string'
+            ? dto.shippingPostalCode.trim().toUpperCase()
+            : '',
         items: merged
           .slice()
           .sort((a, b) => a.productId.localeCompare(b.productId))
@@ -454,7 +529,24 @@ export class OrdersService {
         subtotal,
       });
 
-      const total = subtotal - discount;
+      const shippingQuote = await this.quoteShippingFromItems({
+        shippingCity: dto.shippingCity,
+        shippingPostalCode: dto.shippingPostalCode,
+        declaredValue: subtotal - discount,
+        items: merged.map((item) => {
+          const product = byId.get(item.productId);
+          return {
+            quantity: item.quantity,
+            weightGrams: product?.weightGrams,
+            heightCm: product?.heightCm,
+            widthCm: product?.widthCm,
+            depthCm: product?.thicknessCm,
+          };
+        }),
+      });
+
+      const shippingCost = shippingQuote?.amount ?? 0;
+      const total = subtotal - discount + shippingCost;
 
       for (const item of merged) {
         const product = byId.get(item.productId);
@@ -484,6 +576,10 @@ export class OrdersService {
           guestFirstName,
           guestLastName,
           paymentMethod: dto.paymentMethod,
+          shippingProvider: shippingQuote?.provider ?? null,
+          shippingCity: shippingQuote?.city ?? null,
+          shippingPostalCode: shippingQuote?.postalCode ?? null,
+          shippingCost,
           subtotal,
           discount,
           total,
@@ -645,6 +741,80 @@ export class OrdersService {
         lowStockProducts,
       };
     });
+  }
+
+  private async quoteShippingFromItems(input: {
+    shippingCity?: string;
+    shippingPostalCode?: string;
+    declaredValue: number;
+    items: Array<{
+      quantity: number;
+      weightGrams?: unknown;
+      heightCm?: unknown;
+      widthCm?: unknown;
+      depthCm?: unknown;
+    }>;
+  }): Promise<
+    | {
+        provider: string;
+        city: string;
+        postalCode: string;
+        amount: number;
+      }
+    | undefined
+  > {
+    const normalized = this.normalizeShippingInput({
+      city: input.shippingCity,
+      postalCode: input.shippingPostalCode,
+    });
+    if (!normalized) {
+      return undefined;
+    }
+
+    if (!this.andreaniShipping) {
+      throw new BadRequestException('Shipping provider unavailable');
+    }
+
+    const quote = await this.andreaniShipping.quote({
+      destinationCity: normalized.city,
+      destinationPostalCode: normalized.postalCode,
+      declaredValue: Math.max(0, input.declaredValue),
+      items: input.items,
+    });
+
+    return {
+      provider: quote.provider,
+      city: normalized.city,
+      postalCode: normalized.postalCode,
+      amount: quote.amount,
+    };
+  }
+
+  private normalizeShippingInput(input: {
+    city?: string;
+    postalCode?: string;
+  }): { city: string; postalCode: string } | undefined {
+    const rawCity = typeof input.city === 'string' ? input.city.trim() : '';
+    const rawPostal = typeof input.postalCode === 'string' ? input.postalCode.trim().toUpperCase() : '';
+
+    const hasAny = !!rawCity || !!rawPostal;
+    if (!hasAny) {
+      return undefined;
+    }
+
+    if (!rawCity || !rawPostal) {
+      throw new BadRequestException('Shipping city and postal code are required');
+    }
+
+    if (rawCity.length > 120) {
+      throw new BadRequestException('Shipping city is too long');
+    }
+
+    if (!/^(?:[A-Z]\d{4}[A-Z]{0,3}|\d{4,8})$/.test(rawPostal)) {
+      throw new BadRequestException('Shipping postal code is invalid');
+    }
+
+    return { city: rawCity, postalCode: rawPostal };
   }
 
   private mergeItems(items: Array<{ productId: string; quantity: number }>) {

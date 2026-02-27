@@ -1,7 +1,18 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { CartItem, Order, OrderQuote, PaymentMethod, Product, UserProfile } from './models';
+import {
+  CartItem,
+  Order,
+  OrderQuote,
+  PaymentMethod,
+  Product,
+  ProductFacets,
+  ProductReview,
+  StorefrontContent,
+  UserProfile,
+  WishlistItem,
+} from './models';
 import type { Product as ProductModel } from './models';
 
 type ProductSort = 'recommended' | 'newest' | 'price_asc' | 'price_desc' | 'title_asc';
@@ -15,13 +26,27 @@ export class ApiService {
     return this.http.get<Product[]>(`${this.baseUrl}/products?featured=true`);
   }
 
+  getSiteContent() {
+    return this.http.get<StorefrontContent>(`${this.baseUrl}/site-content/public`);
+  }
+
   getProducts(params?: {
     search?: string;
     type?: ProductModel['type'];
+    publisher?: string;
+    genre?: string;
+    seriesName?: string;
+    language?: string;
+    binding?: string;
+    conditionLabel?: string;
     featured?: boolean;
     inStock?: boolean;
     minPrice?: number;
     maxPrice?: number;
+    minYear?: number;
+    maxYear?: number;
+    minPages?: number;
+    maxPages?: number;
     sort?: ProductSort;
     take?: number;
     skip?: number;
@@ -32,6 +57,24 @@ export class ApiService {
     }
     if (params?.type) {
       qs.set('type', params.type);
+    }
+    if (params?.publisher) {
+      qs.set('publisher', params.publisher);
+    }
+    if (params?.genre) {
+      qs.set('genre', params.genre);
+    }
+    if (params?.seriesName) {
+      qs.set('seriesName', params.seriesName);
+    }
+    if (params?.language) {
+      qs.set('language', params.language);
+    }
+    if (params?.binding) {
+      qs.set('binding', params.binding);
+    }
+    if (params?.conditionLabel) {
+      qs.set('conditionLabel', params.conditionLabel);
     }
     if (params?.featured !== undefined) {
       qs.set('featured', String(params.featured));
@@ -44,6 +87,18 @@ export class ApiService {
     }
     if (params?.maxPrice !== undefined && Number.isFinite(params.maxPrice)) {
       qs.set('maxPrice', String(params.maxPrice));
+    }
+    if (params?.minYear !== undefined && Number.isFinite(params.minYear)) {
+      qs.set('minYear', String(params.minYear));
+    }
+    if (params?.maxYear !== undefined && Number.isFinite(params.maxYear)) {
+      qs.set('maxYear', String(params.maxYear));
+    }
+    if (params?.minPages !== undefined && Number.isFinite(params.minPages)) {
+      qs.set('minPages', String(params.minPages));
+    }
+    if (params?.maxPages !== undefined && Number.isFinite(params.maxPages)) {
+      qs.set('maxPages', String(params.maxPages));
     }
     if (params?.sort) {
       qs.set('sort', params.sort);
@@ -59,12 +114,118 @@ export class ApiService {
     return this.http.get<Product[]>(`${this.baseUrl}/products${query ? `?${query}` : ''}`);
   }
 
+  getProductFacets(params?: {
+    search?: string;
+    type?: ProductModel['type'];
+    publisher?: string;
+    genre?: string;
+    seriesName?: string;
+    language?: string;
+    binding?: string;
+    conditionLabel?: string;
+    featured?: boolean;
+    inStock?: boolean;
+    minPrice?: number;
+    maxPrice?: number;
+    minYear?: number;
+    maxYear?: number;
+    minPages?: number;
+    maxPages?: number;
+  }): Observable<ProductFacets> {
+    const qs = new URLSearchParams();
+    if (params?.search) {
+      qs.set('search', params.search);
+    }
+    if (params?.type) {
+      qs.set('type', params.type);
+    }
+    if (params?.publisher) {
+      qs.set('publisher', params.publisher);
+    }
+    if (params?.genre) {
+      qs.set('genre', params.genre);
+    }
+    if (params?.seriesName) {
+      qs.set('seriesName', params.seriesName);
+    }
+    if (params?.language) {
+      qs.set('language', params.language);
+    }
+    if (params?.binding) {
+      qs.set('binding', params.binding);
+    }
+    if (params?.conditionLabel) {
+      qs.set('conditionLabel', params.conditionLabel);
+    }
+    if (params?.featured !== undefined) {
+      qs.set('featured', String(params.featured));
+    }
+    if (params?.inStock !== undefined) {
+      qs.set('inStock', String(params.inStock));
+    }
+    if (params?.minPrice !== undefined && Number.isFinite(params.minPrice)) {
+      qs.set('minPrice', String(params.minPrice));
+    }
+    if (params?.maxPrice !== undefined && Number.isFinite(params.maxPrice)) {
+      qs.set('maxPrice', String(params.maxPrice));
+    }
+    if (params?.minYear !== undefined && Number.isFinite(params.minYear)) {
+      qs.set('minYear', String(params.minYear));
+    }
+    if (params?.maxYear !== undefined && Number.isFinite(params.maxYear)) {
+      qs.set('maxYear', String(params.maxYear));
+    }
+    if (params?.minPages !== undefined && Number.isFinite(params.minPages)) {
+      qs.set('minPages', String(params.minPages));
+    }
+    if (params?.maxPages !== undefined && Number.isFinite(params.maxPages)) {
+      qs.set('maxPages', String(params.maxPages));
+    }
+
+    const query = qs.toString();
+    return this.http.get<ProductFacets>(`${this.baseUrl}/products/facets${query ? `?${query}` : ''}`);
+  }
+
   lookupProducts(ids: string[]): Observable<Product[]> {
     return this.http.post<Product[]>(`${this.baseUrl}/products/lookup`, { ids });
   }
 
   getProductById(id: string): Observable<Product> {
     return this.http.get<Product>(`${this.baseUrl}/products/${id}`);
+  }
+
+  getProductReviews(id: string, params?: { take?: number; skip?: number }) {
+    const qs = new URLSearchParams();
+    if (params?.take !== undefined) {
+      qs.set('take', String(params.take));
+    }
+    if (params?.skip !== undefined) {
+      qs.set('skip', String(params.skip));
+    }
+    const query = qs.toString();
+    return this.http.get<{ items: ProductReview[]; summary: { count: number; avgRating: number | null } }>(
+      `${this.baseUrl}/products/${id}/reviews${query ? `?${query}` : ''}`,
+    );
+  }
+
+  upsertProductReview(id: string, payload: { rating: number; title?: string; comment?: string }) {
+    return this.http.post<ProductReview>(`${this.baseUrl}/products/${id}/reviews`, payload);
+  }
+
+  removeMyProductReview(id: string) {
+    return this.http.delete<{ removed: boolean }>(`${this.baseUrl}/products/${id}/reviews/me`);
+  }
+
+  getWishlist() {
+    return this.http.get<WishlistItem[]>(`${this.baseUrl}/products/wishlist/me`);
+  }
+
+  addWishlist(productId: string) {
+    return this.http.post<WishlistItem>(`${this.baseUrl}/products/wishlist/${productId}`, {});
+  }
+
+  removeWishlist(productId: string) {
+    return this.http.delete<{ removed: boolean }>(`${this.baseUrl}/products/wishlist/${productId}`);
   }
 
   register(payload: {
@@ -136,13 +297,15 @@ export class ApiService {
     );
   }
 
-  quoteFromCart(payload: { couponCode?: string }) {
+  quoteFromCart(payload: { couponCode?: string; shippingCity?: string; shippingPostalCode?: string }) {
     return this.http.post<OrderQuote>(`${this.baseUrl}/orders/quote`, payload);
   }
 
   quoteGuest(payload: {
     items: Array<{ productId: string; quantity: number }>;
     couponCode?: string;
+    shippingCity?: string;
+    shippingPostalCode?: string;
   }) {
     return this.http.post<OrderQuote>(`${this.baseUrl}/orders/guest/quote`, payload);
   }
@@ -155,6 +318,8 @@ export class ApiService {
     guestEmail: string;
     guestFirstName: string;
     guestLastName: string;
+    shippingCity?: string;
+    shippingPostalCode?: string;
   }, opts?: { idempotencyKey?: string }) {
     const headers = opts?.idempotencyKey
       ? { 'Idempotency-Key': opts.idempotencyKey }
@@ -168,7 +333,13 @@ export class ApiService {
   }
 
   checkout(
-    payload: { couponCode?: string; paymentMethod?: PaymentMethod; notes?: string },
+    payload: {
+      couponCode?: string;
+      paymentMethod?: PaymentMethod;
+      notes?: string;
+      shippingCity?: string;
+      shippingPostalCode?: string;
+    },
     opts?: { idempotencyKey?: string },
   ) {
     const headers = opts?.idempotencyKey
@@ -178,7 +349,7 @@ export class ApiService {
   }
 
   checkoutMercadoPago(
-    payload: { couponCode?: string; notes?: string },
+    payload: { couponCode?: string; notes?: string; shippingCity?: string; shippingPostalCode?: string },
     opts?: { idempotencyKey?: string },
   ) {
     const headers = opts?.idempotencyKey
@@ -199,6 +370,8 @@ export class ApiService {
       guestEmail: string;
       guestFirstName: string;
       guestLastName: string;
+      shippingCity?: string;
+      shippingPostalCode?: string;
     },
     opts?: { idempotencyKey?: string },
   ) {

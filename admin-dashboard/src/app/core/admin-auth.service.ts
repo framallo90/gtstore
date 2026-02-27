@@ -31,9 +31,21 @@ export class AdminAuthService {
     return this.decodeJwt(token)?.role ?? null;
   }
 
+  getUserId(): string | null {
+    const token = this.getToken();
+    if (!token) {
+      return null;
+    }
+    return this.decodeJwt(token)?.sub ?? null;
+  }
+
   hasAdminAccess() {
     const role = this.getRole();
     return role === 'ADMIN' || role === 'STAFF';
+  }
+
+  hasUserManagementAccess() {
+    return this.getRole() === 'ADMIN';
   }
 
   isTokenAdminOrStaff(token: string) {
@@ -126,14 +138,14 @@ export class AdminAuthService {
     return Date.now() >= payload.exp * 1000;
   }
 
-  private decodeJwt(token: string): { exp?: number; role?: Role } | null {
+  private decodeJwt(token: string): { exp?: number; role?: Role; sub?: string } | null {
     try {
       const parts = token.split('.');
       if (parts.length < 2) {
         return null;
       }
       const json = this.base64UrlDecode(parts[1]);
-      return JSON.parse(json) as { exp?: number; role?: Role };
+      return JSON.parse(json) as { exp?: number; role?: Role; sub?: string };
     } catch {
       return null;
     }

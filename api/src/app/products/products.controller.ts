@@ -19,7 +19,9 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import type { JwtPayload } from '../common/types/jwt-payload.type';
 import { AuditService } from '../audit/audit.service';
 import { CreateProductDto } from './dto/create-product.dto';
+import { CreateProductReviewDto } from './dto/create-product-review.dto';
 import { LookupProductsDto } from './dto/lookup-products.dto';
+import { QueryProductReviewsDto } from './dto/query-product-reviews.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
@@ -37,10 +39,59 @@ export class ProductsController {
     return this.productsService.list(query);
   }
 
+  @Get('facets')
+  listFacets(@Query() query: QueryProductsDto) {
+    return this.productsService.listFacets(query);
+  }
+
   // Public helper to load a small set of products (guest cart, etc.)
   @Post('lookup')
   lookup(@Body() dto: LookupProductsDto) {
     return this.productsService.lookup(dto.ids);
+  }
+
+  @Get('wishlist/me')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  wishlist(@CurrentUser() actor: JwtPayload) {
+    return this.productsService.listWishlist(actor.sub);
+  }
+
+  @Post('wishlist/:productId')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  addWishlist(@CurrentUser() actor: JwtPayload, @Param('productId') productId: string) {
+    return this.productsService.addWishlist(actor.sub, productId);
+  }
+
+  @Delete('wishlist/:productId')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  removeWishlist(@CurrentUser() actor: JwtPayload, @Param('productId') productId: string) {
+    return this.productsService.removeWishlist(actor.sub, productId);
+  }
+
+  @Get(':id/reviews')
+  reviews(@Param('id') id: string, @Query() query: QueryProductReviewsDto) {
+    return this.productsService.listReviews(id, query);
+  }
+
+  @Post(':id/reviews')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  upsertReview(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: CreateProductReviewDto,
+  ) {
+    return this.productsService.upsertReview(actor.sub, id, dto);
+  }
+
+  @Delete(':id/reviews/me')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  removeMyReview(@CurrentUser() actor: JwtPayload, @Param('id') id: string) {
+    return this.productsService.removeMyReview(actor.sub, id);
   }
 
   @Get('admin/all')
@@ -79,7 +130,22 @@ export class ProductsController {
         meta: {
           sku: dto.sku,
           title: dto.title,
+          subtitle: dto.subtitle ?? null,
           type: dto.type,
+          publisher: dto.publisher ?? null,
+          genre: dto.genre ?? null,
+          seriesName: dto.seriesName ?? null,
+          seriesNumber: dto.seriesNumber ?? null,
+          language: dto.language ?? null,
+          binding: dto.binding ?? null,
+          publicationYear: dto.publicationYear ?? null,
+          publicationDate: dto.publicationDate ?? null,
+          pageCount: dto.pageCount ?? null,
+          conditionLabel: dto.conditionLabel ?? null,
+          isbn13: dto.isbn13 ?? null,
+          ean: dto.ean ?? null,
+          shippingEtaMinDays: dto.shippingEtaMinDays ?? null,
+          shippingEtaMaxDays: dto.shippingEtaMaxDays ?? null,
           price: dto.price,
           stock: dto.stock,
           isFeatured: dto.isFeatured ?? false,

@@ -181,6 +181,8 @@ describe('OrdersService', () => {
           couponCode: 'GEEK10',
           paymentMethod: 'TRANSFER',
           notes: 'x',
+          shippingCity: '',
+          shippingPostalCode: '',
           items: [{ productId: 'p1', quantity: 1 }],
         }),
       )

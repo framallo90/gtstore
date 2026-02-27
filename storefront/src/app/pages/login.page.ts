@@ -127,9 +127,11 @@ export class LoginPage {
         next: (res) => {
           this.auth.setToken(res.accessToken);
           this.analytics.track('login_success');
+          const hasAdminAccess = res.user.role === 'ADMIN' || res.user.role === 'STAFF';
 
-          this.cart.syncGuestToServer().subscribe(() => {
-            this.router.navigateByUrl(this.returnUrl() ?? '/');
+          this.cart.syncGuestToServer().subscribe({
+            next: () => this.navigateAfterLogin(hasAdminAccess),
+            error: () => this.navigateAfterLogin(hasAdminAccess),
           });
         },
         error: (err) => {
@@ -234,5 +236,17 @@ export class LoginPage {
     }
 
     return 'No se pudo iniciar sesion. Intenta de nuevo.';
+  }
+
+  private navigateAfterLogin(hasAdminAccess: boolean) {
+    const returnUrl = this.returnUrl();
+    if (hasAdminAccess && !returnUrl) {
+      const g = globalThis as unknown as { location?: { assign?: (url: string) => void } };
+      const adminUrl = this.auth.getAdminDashboardUrl();
+      g.location?.assign?.(adminUrl);
+      return;
+    }
+
+    this.router.navigateByUrl(returnUrl ?? '/');
   }
 }

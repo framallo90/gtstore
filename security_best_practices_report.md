@@ -98,3 +98,30 @@ Ademas, se corrigio un punto de integridad de compra: se agrego lock a filas del
   - `api/src/app/orders/orders.service.ts:23-27` (`SELECT ... FOR UPDATE`).
 - `npm audit` prod dependencies:
   - Se ejecuto `npm audit --omit=dev` y reporto `found 0 vulnerabilities`.
+
+---
+
+## Actualizacion de cierre de auditoria (2026-02-26)
+
+### Hallazgos criticos reportados y estado real
+
+- `[C-01] Race condition de stock`: **Mitigado**.
+  - Evidencia: `api/src/app/orders/orders.service.ts` usa decremento atomico con `updateMany` y condicion `stock >= quantity` en checkout user y guest.
+- `[C-02] Normalizacion de guestEmail`: **Mitigado y reforzado**.
+  - Evidencia: `api/src/app/orders/dto/create-guest-order.dto.ts` agrega `@Transform(...trim().toLowerCase())` para `guestEmail` y trim para nombre/apellido/notas.
+  - Evidencia adicional: `api/src/app/orders/orders.service.ts` mantiene normalizacion defensiva en servicio.
+- `[C-03] CSRF logout/cart`: **No reproducible en endpoints autenticados por JWT Bearer**.
+  - Evidencia: `api/src/app/auth/auth.controller.ts` y `api/src/app/orders/orders.controller.ts` usan `JwtAuthGuard` + header `Authorization`.
+  - Nota: se mantiene recomendacion de revisar SameSite/estrategia de refresh cookie segun despliegue.
+- `[C-04] SQL injection por raw query`: **No vulnerable en estado actual**.
+  - Evidencia: `api/src/app/orders/orders.service.ts` usa `Prisma.sql` parametrizado (sin concatenacion de strings).
+
+### Hardening adicional aplicado en esta iteracion
+
+- Validacion anti-replay de webhook de Mercado Pago:
+  - `api/src/app/payments/mercadopago.controller.ts` ahora valida `ts` numerico y ventana maxima de 5 minutos.
+- Rate limiting para endpoints costosos:
+  - App-level: `api/src/main.ts` agrega limite para `POST /api/products/lookup`, `POST /api/orders/guest/quote` y `POST /api/orders/guest/checkout`.
+  - Edge-level: `nginx/default.conf` agrega `expensive_limit` para las mismas rutas.
+- Normalizacion de datos de envio/cupon en DTO publico:
+  - `api/src/app/orders/dto/guest-quote.dto.ts` agrega transforms (`trim` y `uppercase`).

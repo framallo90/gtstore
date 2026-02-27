@@ -26,4 +26,17 @@ export class App implements OnInit {
       error: () => this.authService.logout(),
     });
   }
+
+  getStorefrontUrl() {
+    if (typeof window === 'undefined') {
+      return '/';
+    }
+
+    const { protocol, hostname, host } = window.location;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `${protocol}//${hostname}:4200`;
+    }
+
+    return `${protocol}//${host}`;
+  }
 }

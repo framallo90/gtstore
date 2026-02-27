@@ -51,6 +51,10 @@ model User {
   firstName        String
   lastName         String
   role             Role       @default(CUSTOMER)
+  isActive         Boolean    @default(true)
+  deactivatedAt    DateTime?
+  lastLoginAt      DateTime?
+  lastSeenAt       DateTime?
   refreshTokenHash String?
   emailVerifiedAt  DateTime?
   emailVerificationTokenHash      String?
@@ -58,6 +62,8 @@ model User {
   passwordResetTokenHash          String?
   passwordResetTokenExpiresAt     DateTime?
   cartItems        CartItem[]
+  wishlistItems    WishlistItem[]
+  productReviews   ProductReview[]
   orders           Order[]
   analyticsEvents  AnalyticsEvent[]
   createdAt        DateTime   @default(now())
@@ -65,23 +71,53 @@ model User {
 
   @@index([emailVerificationTokenHash])
   @@index([passwordResetTokenHash])
+  @@index([isActive])
+  @@index([lastSeenAt])
 }
 
 model Product {
   id          String      @id @default(uuid())
   title       String
+  subtitle    String?
   description String
   author      String
   publisher   String?
+  genre       String?
+  seriesName  String?
+  seriesNumber Int?
+  language    String?
+  binding     String?
+  edition     String?
+  translator  String?
+  illustrator String?
+  narrator    String?
+  editor      String?
+  originCountry String?
   isbn        String?
+  isbn10      String?
+  isbn13      String?
+  ean         String?
   sku         String      @unique
   type        ProductType
+  publicationYear Int?
+  publicationDate DateTime?
+  pageCount   Int?
+  dimensions  String?
+  heightCm    Decimal?    @db.Decimal(6, 2)
+  widthCm     Decimal?    @db.Decimal(6, 2)
+  thicknessCm Decimal?    @db.Decimal(6, 2)
+  weightGrams Int?
+  conditionLabel String?
+  shippingEtaMinDays Int?
+  shippingEtaMaxDays Int?
   price       Decimal     @db.Decimal(10, 2)
   stock       Int         @default(0)
   coverUrl    String?
   isFeatured  Boolean     @default(false)
   isActive    Boolean     @default(true)
   cartItems   CartItem[]
+  wishlistItems WishlistItem[]
+  reviews     ProductReview[]
   orderItems  OrderItem[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -89,7 +125,46 @@ model Product {
   @@index([title])
   @@index([author])
   @@index([publisher])
+  @@index([genre])
+  @@index([seriesName])
+  @@index([language])
+  @@index([binding])
+  @@index([conditionLabel])
+  @@index([publicationYear])
+  @@index([publicationDate])
+  @@index([isbn13])
+  @@index([ean])
   @@index([type])
+}
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([productId])
+}
+
+model ProductReview {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  rating    Int
+  title     String?
+  comment   String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@index([productId, createdAt])
+  @@index([userId])
 }
 
 model CartItem {
@@ -110,6 +185,10 @@ model Order {
   userId      String?
   status      OrderStatus @default(PENDING)
   paymentMethod PaymentMethod?
+  shippingProvider   String?
+  shippingCity       String?
+  shippingPostalCode String?
+  shippingCost       Decimal     @default(0) @db.Decimal(10, 2)
   mpPreferenceId      String?
   mpInitPoint         String?
   mpSandboxInitPoint  String?
@@ -211,6 +290,13 @@ model AnalyticsEvent {
   @@index([userId])
   @@index([anonymousId])
   @@index([sessionId])
+}
+
+model SiteContent {
+  key       String   @id
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ApiErrorLog {

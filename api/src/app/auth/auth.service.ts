@@ -11,9 +11,13 @@ import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import type { JwtPayload } from '../common/types/jwt-payload.type';
+
+type LoginInput = {
+  email: string;
+  password: string;
+};
 
 @Injectable()
 export class AuthService {
@@ -48,13 +52,18 @@ export class AuthService {
         passwordHash,
         firstName,
         lastName,
+        lastLoginAt: new Date(),
+        lastSeenAt: new Date(),
         emailVerificationTokenHash: verificationTokenHash,
         emailVerificationTokenExpiresAt: verificationExpiresAt,
       },
     });
 
     const tokens = await this.generateTokens(user.id, user.email, user.role);
-    await this.setRefreshTokenHash(user.id, tokens.refreshToken);
+    await this.setRefreshTokenHash(user.id, tokens.refreshToken, {
+      touchLoginAt: true,
+      touchSeenAt: true,
+    });
 
     // Use URL fragment to avoid leaking tokens via server logs, referrers and analytics query capture.
     const verifyUrl = `${this.getStoreBaseUrl()}/verify-email#token=${verificationToken}`;
@@ -68,12 +77,15 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto, allowedRoles?: Role[]) {
+  async login(dto: LoginInput, allowedRoles?: Role[]) {
     const email = dto.email.trim().toLowerCase();
     const user = await this.prisma.user.findUnique({
       where: { email },
     });
     if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (!user.isActive) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -87,7 +99,10 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokens(user.id, user.email, user.role);
-    await this.setRefreshTokenHash(user.id, tokens.refreshToken);
+    await this.setRefreshTokenHash(user.id, tokens.refreshToken, {
+      touchLoginAt: true,
+      touchSeenAt: true,
+    });
     return {
       user: this.serializeUser(user),
       ...tokens,
@@ -109,7 +124,7 @@ export class AuthService {
     }
 
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-    if (!user || !user.refreshTokenHash) {
+    if (!user || !user.refreshTokenHash || !user.isActive) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
@@ -119,7 +134,9 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokens(user.id, user.email, user.role);
-    await this.setRefreshTokenHash(user.id, tokens.refreshToken);
+    await this.setRefreshTokenHash(user.id, tokens.refreshToken, {
+      touchSeenAt: true,
+    });
     return {
       user: this.serializeUser(user),
       ...tokens,
@@ -128,9 +145,13 @@ export class AuthService {
 
   async me(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
+    if (!user || !user.isActive) {
       throw new UnauthorizedException('User not found');
     }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastSeenAt: new Date() },
+    });
     return this.serializeUser(user);
   }
 
@@ -278,11 +299,20 @@ export class AuthService {
     return secret;
   }
 
-  private async setRefreshTokenHash(userId: string, refreshToken: string) {
+  private async setRefreshTokenHash(
+    userId: string,
+    refreshToken: string,
+    options?: { touchLoginAt?: boolean; touchSeenAt?: boolean },
+  ) {
     const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+    const now = new Date();
     await this.prisma.user.update({
       where: { id: userId },
-      data: { refreshTokenHash },
+      data: {
+        refreshTokenHash,
+        ...(options?.touchLoginAt ? { lastLoginAt: now } : {}),
+        ...(options?.touchSeenAt ? { lastSeenAt: now } : {}),
+      },
     });
   }
 

@@ -14,6 +14,7 @@ import { Role } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { AdminLoginDto } from './dto/admin-login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -61,7 +62,7 @@ export class AuthController {
 
     return {
       httpOnly: true,
-      sameSite: 'lax' as const,
+      sameSite: 'strict' as const,
       secure: isProd,
       path: '/api/auth',
       ...(maxAge ? { maxAge } : {}),
@@ -101,7 +102,7 @@ export class AuthController {
   @Post('admin/login')
   @ApiOperation({ summary: 'Admin/staff login and receive tokens' })
   async adminLogin(
-    @Body() dto: LoginDto,
+    @Body() dto: AdminLoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const { user, accessToken, refreshToken } = await this.authService.login(dto, [

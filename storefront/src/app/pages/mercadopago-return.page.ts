@@ -19,7 +19,8 @@ function asResultKind(value: unknown): ResultKind {
   template: `
     <section class="page-stack">
       <section class="card panel">
-        <h2>{{ title() }}</h2>
+        <h2>4) Recibo y estado del pago</h2>
+        <p class="muted"><strong>{{ title() }}</strong></p>
 
         @if (orderId()) {
           <p class="muted">Pedido: <strong>{{ orderId() }}</strong></p>
@@ -32,6 +33,22 @@ function asResultKind(value: unknown): ResultKind {
         }
 
         <p class="muted">{{ message() }}</p>
+
+        <h3>Emails de estado</h3>
+        <ul class="admin-list">
+          <li class="admin-list__item">
+            <strong>Pedido creado</strong>
+            <span class="muted">Se envia cuando se genera la orden.</span>
+          </li>
+          <li class="admin-list__item">
+            <strong>Pago aprobado/rechazado</strong>
+            <span class="muted">Se envia luego del webhook de Mercado Pago.</span>
+          </li>
+          <li class="admin-list__item">
+            <strong>Estados logisticos</strong>
+            <span class="muted">PROCESSING, SHIPPED y DELIVERED.</span>
+          </li>
+        </ul>
 
         <div class="cart__cta">
           <a routerLink="/catalog">Volver al catalogo</a>

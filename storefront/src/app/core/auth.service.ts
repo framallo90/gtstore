@@ -2,6 +2,9 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, finalize, map, Observable, of, shareReplay, tap } from 'rxjs';
 import { ApiService } from './api.service';
+import type { UserProfile } from './models';
+
+type TokenPayload = { exp?: number; role?: UserProfile['role'] };
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -20,6 +23,35 @@ export class AuthService {
 
   getToken() {
     return this.tokenSignal();
+  }
+
+  getRole(): UserProfile['role'] | null {
+    const token = this.getToken();
+    if (!token) {
+      return null;
+    }
+    if (this.isTokenExpired(token)) {
+      return null;
+    }
+    return this.decodeJwt(token)?.role ?? null;
+  }
+
+  hasAdminAccess() {
+    const role = this.getRole();
+    return role === 'ADMIN' || role === 'STAFF';
+  }
+
+  getAdminDashboardUrl() {
+    if (typeof window === 'undefined') {
+      return '/admin';
+    }
+
+    const { protocol, hostname, host } = window.location;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `${protocol}//${hostname}:4300`;
+    }
+
+    return `${protocol}//${host}/admin`;
   }
 
   setToken(token: string) {
@@ -100,14 +132,14 @@ export class AuthService {
     return Date.now() >= payload.exp * 1000;
   }
 
-  private decodeJwt(token: string): { exp?: number } | null {
+  private decodeJwt(token: string): TokenPayload | null {
     try {
       const parts = token.split('.');
       if (parts.length < 2) {
         return null;
       }
       const json = this.base64UrlDecode(parts[1]);
-      return JSON.parse(json) as { exp?: number };
+      return JSON.parse(json) as TokenPayload;
     } catch {
       return null;
     }
