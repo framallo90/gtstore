@@ -10,7 +10,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { OrderStatus, PaymentMethod } from '@prisma/client';
+import {
+  MarketplaceListingStatus,
+  MarketplaceOrderStatus,
+  OrderStatus,
+  PaymentMethod,
+  PayoutStatus,
+} from '@prisma/client';
 import type { Request } from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -142,7 +148,14 @@ export class MercadoPagoController {
     }
 
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
-    if (!order || order.paymentMethod !== PaymentMethod.MERCADOPAGO) {
+    const marketplaceOrder = order
+      ? null
+      : await this.prisma.marketplaceOrder.findUnique({ where: { id: orderId } });
+
+    if (
+      (!order || order.paymentMethod !== PaymentMethod.MERCADOPAGO) &&
+      (!marketplaceOrder || marketplaceOrder.paymentMethod !== PaymentMethod.MERCADOPAGO)
+    ) {
       return { ok: true };
     }
 
@@ -154,7 +167,7 @@ export class MercadoPagoController {
       return { ok: true };
     }
 
-    const expectedAmount = Number(order.total);
+    const expectedAmount = Number(order ? order.total : marketplaceOrder?.buyerTotal);
     const paidAmount = Number(payment.transaction_amount);
     if (
       Number.isFinite(expectedAmount) &&
@@ -164,39 +177,80 @@ export class MercadoPagoController {
       return { ok: true };
     }
 
-    if (
-      order.mpPreferenceId &&
-      payment.preference_id &&
-      payment.preference_id !== order.mpPreferenceId
-    ) {
+    const expectedPreferenceId = order?.mpPreferenceId ?? marketplaceOrder?.mpPreferenceId;
+    if (expectedPreferenceId && payment.preference_id && payment.preference_id !== expectedPreferenceId) {
       return { ok: true };
     }
 
     // Record raw payment state on the order (for support/debugging).
-    await this.prisma.order.update({
-      where: { id: orderId },
-      data: {
-        mpPaymentId: paymentId,
-        mpPaymentStatus: payment.status ?? null,
-        mpPreferenceId: payment.preference_id ?? order.mpPreferenceId ?? null,
-        mpMerchantOrderId: payment.merchant_order_id
-          ? String(payment.merchant_order_id)
-          : order.mpMerchantOrderId ?? null,
-        mpLastWebhookAt: new Date(),
-      },
-    });
+    if (order) {
+      await this.prisma.order.update({
+        where: { id: orderId },
+        data: {
+          mpPaymentId: paymentId,
+          mpPaymentStatus: payment.status ?? null,
+          mpPreferenceId: payment.preference_id ?? order.mpPreferenceId ?? null,
+          mpMerchantOrderId: payment.merchant_order_id
+            ? String(payment.merchant_order_id)
+            : order.mpMerchantOrderId ?? null,
+          mpLastWebhookAt: new Date(),
+        },
+      });
+    } else if (marketplaceOrder) {
+      await this.prisma.marketplaceOrder.update({
+        where: { id: orderId },
+        data: {
+          mpPaymentId: paymentId,
+          mpPaymentStatus: payment.status ?? null,
+          mpPreferenceId: payment.preference_id ?? marketplaceOrder.mpPreferenceId ?? null,
+        },
+      });
+    }
 
     const status = String(payment.status ?? '').toLowerCase();
     if (status === 'approved') {
-      if (order.status !== OrderStatus.PAID && order.status !== OrderStatus.CANCELED) {
+      if (order && order.status !== OrderStatus.PAID && order.status !== OrderStatus.CANCELED) {
         await this.orders.updateStatus(orderId, { status: OrderStatus.PAID });
+      } else if (
+        marketplaceOrder &&
+        marketplaceOrder.status !== MarketplaceOrderStatus.PAID &&
+        marketplaceOrder.status !== MarketplaceOrderStatus.CANCELED
+      ) {
+        await this.prisma.marketplaceOrder.update({
+          where: { id: orderId },
+          data: {
+            status: MarketplaceOrderStatus.PAID,
+          },
+        });
       }
       return { ok: true };
     }
 
     if (status === 'rejected' || status === 'cancelled') {
-      if (order.status === OrderStatus.PENDING) {
+      if (order && order.status === OrderStatus.PENDING) {
         await this.orders.updateStatus(orderId, { status: OrderStatus.CANCELED });
+      } else if (
+        marketplaceOrder &&
+        marketplaceOrder.status === MarketplaceOrderStatus.PENDING
+      ) {
+        await this.prisma.$transaction([
+          this.prisma.marketplaceListing.update({
+            where: { id: marketplaceOrder.listingId },
+            data: {
+              status: MarketplaceListingStatus.PUBLISHED,
+              isActive: true,
+              stock: { increment: 1 },
+              soldAt: null,
+            },
+          }),
+          this.prisma.marketplaceOrder.update({
+            where: { id: orderId },
+            data: {
+              status: MarketplaceOrderStatus.CANCELED,
+              payoutStatus: PayoutStatus.CANCELED,
+            },
+          }),
+        ]);
       }
       return { ok: true };
     }
@@ -207,7 +261,7 @@ export class MercadoPagoController {
   private isWebhookSignatureValid(req: Request, body: any): boolean {
     const webhookSecret = (process.env.MP_WEBHOOK_SECRET ?? '').trim();
     if (!webhookSecret) {
-      return true;
+      return false;
     }
 
     const signatureHeader = req.headers['x-signature'];

@@ -17,6 +17,10 @@ export type AndreaniQuoteInput = {
   destinationPostalCode: string;
   destinationCity: string;
   declaredValue: number;
+  senderProvince?: string;
+  senderDistrict?: string;
+  senderLocality?: string;
+  senderZipCode?: string;
   items: AndreaniQuoteItem[];
 };
 
@@ -66,10 +70,18 @@ export class AndreaniShippingService {
 
     const senderContract = this.requireEnv('ANDREANI_SENDER_CONTRACT');
     const senderClient = this.requireEnv('ANDREANI_SENDER_CLIENT');
-    const senderProvince = this.requireEnv('ANDREANI_SENDER_PROVINCE');
-    const senderDistrict = this.requireEnv('ANDREANI_SENDER_DISTRICT');
-    const senderLocality = this.requireEnv('ANDREANI_SENDER_LOCALITY');
-    const senderZipCode = this.requireEnv('ANDREANI_SENDER_ZIP_CODE');
+    const senderProvince =
+      this.normalizeOptionalText(input.senderProvince) ??
+      this.requireEnv('ANDREANI_SENDER_PROVINCE');
+    const senderDistrict =
+      this.normalizeOptionalText(input.senderDistrict) ??
+      this.requireEnv('ANDREANI_SENDER_DISTRICT');
+    const senderLocality =
+      this.normalizeOptionalText(input.senderLocality) ??
+      this.requireEnv('ANDREANI_SENDER_LOCALITY');
+    const senderZipCode =
+      this.normalizeOptionalText(input.senderZipCode) ??
+      this.requireEnv('ANDREANI_SENDER_ZIP_CODE');
 
     const receiverProvince =
       this.readEnv('ANDREANI_RECEIVER_PROVINCE') || this.readEnv('ANDREANI_SENDER_PROVINCE');
@@ -293,6 +305,14 @@ export class AndreaniShippingService {
       return undefined;
     }
     const trimmed = raw.trim();
+    return trimmed || undefined;
+  }
+
+  private normalizeOptionalText(value: unknown): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+    const trimmed = value.trim();
     return trimmed || undefined;
   }
 

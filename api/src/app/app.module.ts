@@ -16,6 +16,7 @@ import { ObservabilityModule } from './observability/observability.module';
 import { AuditModule } from './audit/audit.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SiteContentModule } from './site-content/site-content.module';
+import { MarketplaceModule } from './marketplace/marketplace.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { SiteContentModule } from './site-content/site-content.module';
     AuditModule,
     PaymentsModule,
     SiteContentModule,
+    MarketplaceModule,
   ],
   controllers: [AppController],
   providers: [

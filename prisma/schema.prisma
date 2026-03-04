@@ -19,9 +19,70 @@ enum Role {
   ADMIN
 }
 
+enum SellerStatus {
+  NONE
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum SellerVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
 enum ProductType {
   BOOK
   COMIC
+}
+
+enum MarketplaceListingCategory {
+  COMIC
+  MANGA
+  BOOK
+  COLLECTOR_VOLUME
+}
+
+enum MarketplaceListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  PUBLISHED
+  REJECTED
+  REMOVED_BY_ADMIN
+  SOLD
+  ARCHIVED
+}
+
+enum MarketplaceItemCondition {
+  LIKE_NEW
+  VERY_GOOD
+  GOOD
+  ACCEPTABLE
+  HAS_DETAILS
+}
+
+enum MarketplaceAssetType {
+  IMAGE
+  VIDEO
+}
+
+enum MarketplaceReviewDecision {
+  APPROVE
+  REJECT
+  REQUEST_CHANGES
+  REMOVE
+}
+
+enum MarketplaceAppealStatus {
+  NONE
+  PENDING
+  ACCEPTED
+  REJECTED
 }
 
 enum OrderStatus {
@@ -33,9 +94,27 @@ enum OrderStatus {
   CANCELED
 }
 
+enum MarketplaceOrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELED
+  DISPUTED
+}
+
 enum DiscountType {
   PERCENTAGE
   FIXED
+}
+
+enum PayoutStatus {
+  PENDING
+  ON_HOLD
+  READY_TO_RELEASE
+  RELEASED
+  CANCELED
 }
 
 enum PaymentMethod {
@@ -51,7 +130,12 @@ model User {
   firstName        String
   lastName         String
   role             Role       @default(CUSTOMER)
+  sellerStatus     SellerStatus @default(NONE)
   isActive         Boolean    @default(true)
+  country          String?
+  province         String?
+  city             String?
+  postalCode       String?
   deactivatedAt    DateTime?
   lastLoginAt      DateTime?
   lastSeenAt       DateTime?
@@ -66,6 +150,12 @@ model User {
   productReviews   ProductReview[]
   orders           Order[]
   analyticsEvents  AnalyticsEvent[]
+  sellerVerificationRequests SellerVerificationRequest[] @relation("MarketplaceVerificationApplicant")
+  marketplaceListings        MarketplaceListing[]         @relation("MarketplaceListingSeller")
+  marketplaceReviews         MarketplaceReview[]          @relation("MarketplaceReviewReviewer")
+  marketplaceAppeals         MarketplaceAppeal[]          @relation("MarketplaceAppealSeller")
+  marketplaceOrdersAsBuyer   MarketplaceOrder[]           @relation("MarketplaceOrderBuyer")
+  marketplaceOrdersAsSeller  MarketplaceOrder[]           @relation("MarketplaceOrderSeller")
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
@@ -73,6 +163,8 @@ model User {
   @@index([passwordResetTokenHash])
   @@index([isActive])
   @@index([lastSeenAt])
+  @@index([sellerStatus])
+  @@index([country, province, city])
 }
 
 model Product {
@@ -226,6 +318,157 @@ model OrderItem {
   product     Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
+}
+
+model SellerVerificationRequest {
+  id         String                   @id @default(uuid())
+  userId     String
+  status     SellerVerificationStatus @default(PENDING)
+  dniFrontPath String
+  dniBackPath  String
+  selfiePath   String
+  reviewNotes  String?                @db.Text
+  reviewedAt   DateTime?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  user       User                     @relation("MarketplaceVerificationApplicant", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model MarketplaceListing {
+  id             String                    @id @default(uuid())
+  sellerId       String
+  status         MarketplaceListingStatus  @default(DRAFT)
+  category       MarketplaceListingCategory
+  title          String
+  subtitle       String?
+  description    String                    @db.Text
+  author         String?
+  publisher      String?
+  genre          String?
+  language       String?
+  edition        String?
+  publicationYear Int?
+  isbn           String?
+  condition      MarketplaceItemCondition
+  conditionNotes String?                   @db.Text
+  declaredDefects String?                  @db.Text
+  price          Decimal                   @db.Decimal(10, 2)
+  stock          Int                       @default(1)
+  coverAssetId   String?
+  adminReason    String?                   @db.Text
+  appealStatus   MarketplaceAppealStatus   @default(NONE)
+  isActive       Boolean                   @default(false)
+  publishedAt    DateTime?
+  removedAt      DateTime?
+  soldAt         DateTime?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  seller         User                      @relation("MarketplaceListingSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  assets         MarketplaceListingAsset[]
+  reviews        MarketplaceReview[]
+  appeals        MarketplaceAppeal[]
+  orders         MarketplaceOrder[]
+
+  @@index([sellerId])
+  @@index([status])
+  @@index([isActive])
+  @@index([category])
+  @@index([publishedAt])
+  @@index([createdAt])
+}
+
+model MarketplaceListingAsset {
+  id         String               @id @default(uuid())
+  listingId   String
+  type        MarketplaceAssetType
+  path        String
+  isCover     Boolean              @default(false)
+  isEvidence  Boolean              @default(true)
+  isApproved  Boolean              @default(false)
+  sortOrder   Int                  @default(0)
+  createdAt   DateTime             @default(now())
+  listing     MarketplaceListing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([type])
+}
+
+model MarketplaceReview {
+  id         String                    @id @default(uuid())
+  listingId   String
+  reviewerId  String
+  decision    MarketplaceReviewDecision
+  reason      String
+  notes       String?                  @db.Text
+  createdAt   DateTime                 @default(now())
+  listing     MarketplaceListing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reviewer    User                     @relation("MarketplaceReviewReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([listingId])
+  @@index([reviewerId])
+  @@index([createdAt])
+}
+
+model MarketplaceAppeal {
+  id             String                   @id @default(uuid())
+  listingId       String
+  sellerId        String
+  status          MarketplaceAppealStatus @default(PENDING)
+  message         String                   @db.Text
+  resolutionNotes String?                  @db.Text
+  resolvedAt      DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  listing         MarketplaceListing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  seller          User                     @relation("MarketplaceAppealSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+
+  @@index([listingId])
+  @@index([sellerId])
+  @@index([status])
+}
+
+model MarketplaceOrder {
+  id               String                 @id @default(uuid())
+  buyerId          String
+  sellerId         String
+  listingId        String
+  status           MarketplaceOrderStatus @default(PENDING)
+  paymentMethod    PaymentMethod?
+  shippingProvider String?
+  shippingCity     String?
+  shippingPostalCode String?
+  shippingCost     Decimal                @default(0) @db.Decimal(10, 2)
+  salePrice        Decimal                @db.Decimal(10, 2)
+  platformCommission Decimal              @db.Decimal(10, 2)
+  sellerNetAmount  Decimal                @db.Decimal(10, 2)
+  buyerTotal       Decimal                @db.Decimal(10, 2)
+  payoutStatus     PayoutStatus           @default(PENDING)
+  mpPreferenceId   String?
+  mpInitPoint      String?
+  mpSandboxInitPoint String?
+  mpPaymentId      String?
+  mpPaymentStatus  String?
+  deliveredAt      DateTime?
+  payoutReleasedAt DateTime?
+  disputeOpenedAt  DateTime?
+  notes            String?                @db.Text
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  buyer            User                   @relation("MarketplaceOrderBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+  seller           User                   @relation("MarketplaceOrderSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  listing          MarketplaceListing     @relation(fields: [listingId], references: [id], onDelete: Restrict)
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([listingId])
+  @@index([status])
+  @@index([payoutStatus])
+  @@index([mpPreferenceId])
+  @@index([mpPaymentId])
 }
 
 model IdempotencyKey {
