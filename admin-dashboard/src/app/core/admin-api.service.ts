@@ -174,6 +174,13 @@ export class AdminApiService {
     );
   }
 
+  reactivateUser(id: string) {
+    return this.http.patch<{ success: boolean; reactivatedUser: AdminUser }>(
+      `${this.baseUrl}/users/${id}/reactivate`,
+      {},
+    );
+  }
+
   recentErrors(limit = 20) {
     const safe = Math.max(1, Math.min(200, Math.trunc(limit)));
     return this.http.get<{ items: CachedError[] }>(

@@ -24,7 +24,7 @@ test('has title', async ({ page }) => {
   });
 
   await page.goto('/login');
-  await expect(page.locator('h1')).toContainText('Admin Dashboard');
+  await expect(page.getByRole('heading', { name: 'Panel de administracion', level: 2 })).toBeVisible();
 });
 
 test('shows dashboard summary when authenticated (mocked API)', async ({ page }) => {
@@ -127,7 +127,7 @@ test('shows dashboard summary when authenticated (mocked API)', async ({ page })
   });
 
   await page.goto('/login');
-  await page.getByLabel('Email').fill('admin@x.com');
+  await page.getByLabel('Usuario admin o email').fill('admin@x.com');
   await page.getByLabel('Password').fill('password123');
   await expect(page.getByRole('button', { name: 'Entrar' })).toBeEnabled();
   const loginResponse = page.waitForResponse(

@@ -13,7 +13,7 @@ test.describe('Admin Dashboard (fullstack)', () => {
     await page.goto('/login');
     await expect(page.getByRole('heading', { name: 'Panel de administracion', level: 2 })).toBeVisible();
 
-    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Usuario admin o email').fill(email);
     await page.getByLabel('Password').fill(password);
     await expect(page.getByRole('button', { name: 'Entrar' })).toBeEnabled();
 

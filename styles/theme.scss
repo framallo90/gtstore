@@ -734,6 +734,11 @@ p {
   align-items: center;
 }
 
+.products-admin-grid {
+  grid-template-columns: minmax(520px, 1.35fr) minmax(340px, 1fr);
+  align-items: start;
+}
+
 .admin-list {
   display: grid;
   gap: 0.7rem;
@@ -3669,6 +3674,10 @@ body::before {
   }
 
   .content-admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .products-admin-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -83,23 +83,37 @@ import { AdminUser, Role } from '../core/models';
                   >
                     Editar cuenta
                   </button>
-                  <button
-                    type="button"
-                    class="button--danger"
-                    (click)="deactivateUser(user)"
-                    [disabled]="deletingId() === user.id || isCurrentUser(user) || !isUserActive(user)"
-                    [title]="deleteTitle(user)"
-                  >
-                    @if (deletingId() === user.id) {
-                      Desactivando...
-                    } @else {
-                      Desactivar cuenta
-                    }
-                  </button>
+                  @if (isUserActive(user)) {
+                    <button
+                      type="button"
+                      class="button--danger"
+                      (click)="deactivateUser(user)"
+                      [disabled]="deletingId() === user.id || isCurrentUser(user)"
+                      [title]="deleteTitle(user)"
+                    >
+                      @if (deletingId() === user.id) {
+                        Desactivando...
+                      } @else {
+                        Desactivar cuenta
+                      }
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      (click)="reactivateUser(user)"
+                      [disabled]="reactivatingId() === user.id"
+                    >
+                      @if (reactivatingId() === user.id) {
+                        Reactivando...
+                      } @else {
+                        Reactivar cuenta
+                      }
+                    </button>
+                  }
                   @if (isCurrentUser(user)) {
                     <span class="muted">Tu cuenta no se puede desactivar desde este panel.</span>
                   } @else if (!isUserActive(user)) {
-                    <span class="muted">Cuenta historica (solo lectura).</span>
+                    <span class="muted">Cuenta historica (solo lectura). Reactivala para editar.</span>
                   }
                 </div>
 
@@ -181,13 +195,14 @@ export class UsersAdminPage implements OnInit {
   editingId = signal<string | null>(null);
   savingId = signal<string | null>(null);
   deletingId = signal<string | null>(null);
+  reactivatingId = signal<string | null>(null);
 
   roles: Role[] = ['CUSTOMER', 'STAFF', 'ADMIN'];
 
   editForm = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.maxLength(200)]],
-    firstName: ['', [Validators.required, Validators.maxLength(80)]],
-    lastName: ['', [Validators.required, Validators.maxLength(80)]],
+    firstName: ['', [Validators.maxLength(80)]],
+    lastName: ['', [Validators.maxLength(80)]],
     role: ['CUSTOMER' as Role, [Validators.required]],
     password: ['', [Validators.minLength(8), Validators.maxLength(200)]],
   });
@@ -201,7 +216,7 @@ export class UsersAdminPage implements OnInit {
     this.error.set('');
     this.success.set('');
     this.api.listUsers().subscribe({
-      next: (res) => this.users.set(res),
+      next: (res) => this.users.set(this.sortUsers(res)),
       error: (err) => this.error.set(this.formatError(err)),
       complete: () => this.loading.set(false),
     });
@@ -262,8 +277,8 @@ export class UsersAdminPage implements OnInit {
     const role = this.editForm.controls.role.value;
     const password = this.editForm.controls.password.value.trim();
 
-    if (!email || !firstName || !lastName) {
-      this.error.set('Email, nombre y apellido son obligatorios.');
+    if (!email) {
+      this.error.set('Email o usuario es obligatorio.');
       return;
     }
 
@@ -273,16 +288,21 @@ export class UsersAdminPage implements OnInit {
 
     const payload: {
       email: string;
-      firstName: string;
-      lastName: string;
       role: Role;
+      firstName?: string;
+      lastName?: string;
       password?: string;
     } = {
       email,
-      firstName,
-      lastName,
       role,
     };
+
+    if (firstName.length > 0) {
+      payload.firstName = firstName;
+    }
+    if (lastName.length > 0) {
+      payload.lastName = lastName;
+    }
 
     if (password.length > 0) {
       payload.password = password;
@@ -290,7 +310,9 @@ export class UsersAdminPage implements OnInit {
 
     this.api.updateUser(userId, payload).subscribe({
       next: (updated) => {
-        this.users.update((items) => items.map((item) => (item.id === userId ? updated : item)));
+        this.users.update((items) =>
+          this.sortUsers(items.map((item) => (item.id === userId ? updated : item))),
+        );
         this.success.set(`Usuario ${updated.email} actualizado.`);
         this.cancelEdit();
       },
@@ -339,7 +361,7 @@ export class UsersAdminPage implements OnInit {
     this.api.deleteUser(user.id).subscribe({
       next: (res) => {
         this.users.update((items) =>
-          items.map((item) => (item.id === user.id ? res.deactivatedUser : item)),
+          this.sortUsers(items.map((item) => (item.id === user.id ? res.deactivatedUser : item))),
         );
         if (this.editingId() === user.id) {
           this.cancelEdit();
@@ -351,6 +373,36 @@ export class UsersAdminPage implements OnInit {
       },
       complete: () => {
         this.deletingId.set(null);
+      },
+    });
+  }
+
+  reactivateUser(user: AdminUser) {
+    if (this.reactivatingId()) {
+      return;
+    }
+
+    if (this.isUserActive(user)) {
+      this.success.set(`La cuenta ${user.email} ya esta activa.`);
+      return;
+    }
+
+    this.reactivatingId.set(user.id);
+    this.error.set('');
+    this.success.set('');
+
+    this.api.reactivateUser(user.id).subscribe({
+      next: (res) => {
+        this.users.update((items) =>
+          this.sortUsers(items.map((item) => (item.id === user.id ? res.reactivatedUser : item))),
+        );
+        this.success.set(`Cuenta ${user.email} reactivada. Ya puedes editarla.`);
+      },
+      error: (err) => {
+        this.error.set(this.formatError(err));
+      },
+      complete: () => {
+        this.reactivatingId.set(null);
       },
     });
   }
@@ -511,5 +563,19 @@ export class UsersAdminPage implements OnInit {
     if (row instanceof HTMLElement) {
       row.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+  }
+
+  private sortUsers(items: AdminUser[]) {
+    return [...items].sort((a, b) => {
+      const activeA = this.isUserActive(a) ? 1 : 0;
+      const activeB = this.isUserActive(b) ? 1 : 0;
+      if (activeA !== activeB) {
+        return activeB - activeA;
+      }
+
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
   }
 }

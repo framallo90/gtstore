@@ -156,6 +156,32 @@ export class UsersService {
     });
   }
 
+  async reactivateUser(userId: string) {
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, isActive: true },
+    });
+    if (!existing) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (existing.isActive) {
+      return this.prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: this.userSelect,
+      });
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isActive: true,
+        deactivatedAt: null,
+      },
+      select: this.userSelect,
+    });
+  }
+
   private async assertValidAdminTransition(
     actorUserId: string,
     targetUserId: string,

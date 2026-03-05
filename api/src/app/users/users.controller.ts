@@ -116,4 +116,31 @@ export class UsersController {
 
     return { success: true, deactivatedUser: deactivated };
   }
+
+  @Patch(':id/reactivate')
+  @Roles(Role.ADMIN)
+  async reactivate(
+    @CurrentUser() actor: JwtPayload,
+    @Req() req: Request & { requestId?: string },
+    @Param('id') id: string,
+  ) {
+    const reactivated = await this.usersService.reactivateUser(id);
+    this.audit
+      .log({
+        actorUserId: actor.sub,
+        actorRole: actor.role,
+        action: 'USER_REACTIVATE',
+        entityType: 'User',
+        entityId: id,
+        requestId: req.requestId,
+        ip: req.ip,
+        userAgent: String(req.headers['user-agent'] ?? ''),
+        meta: {
+          reactivatedRole: reactivated.role,
+        },
+      })
+      .catch(() => undefined);
+
+    return { success: true, reactivatedUser: reactivated };
+  }
 }

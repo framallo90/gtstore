@@ -17,7 +17,7 @@ import { AdminProduct, ProductType } from '../core/models';
         </p>
       </header>
 
-      <section class="grid">
+      <section class="grid products-admin-grid">
         <article class="card">
           <h3>Crear producto</h3>
           <form class="admin-form" [formGroup]="form" (ngSubmit)="create()">

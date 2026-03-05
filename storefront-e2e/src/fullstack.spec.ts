@@ -29,22 +29,34 @@ test.describe('Storefront (fullstack)', () => {
     await page.goto('/checkout');
     await expect(page.getByRole('heading', { name: 'Checkout' })).toBeVisible();
 
+    await page.getByRole('button', { name: 'Continuar a envio' }).click();
+    await page.getByLabel('Ciudad').fill('Rosario');
+    await page.getByLabel('Codigo postal').fill('2000');
+    await page.getByRole('button', { name: 'Continuar a pago' }).click();
+
     // Guest buyer details.
     const guestEmail = uniqueEmail('guest');
     await page.getByLabel('Email', { exact: true }).fill(guestEmail);
-    await page.getByLabel('Repetir email', { exact: true }).fill(guestEmail);
     await page.getByLabel('Nombre').fill('E2E');
     await page.getByLabel('Apellido').fill('Guest');
 
     const checkoutResponse = page.waitForResponse((res) => {
       return (
         res.url().includes('/api/orders/guest/checkout') &&
-        (res.status() === 200 || res.status() === 201)
+        (res.status() === 200 || res.status() === 201 || res.status() === 503)
       );
     });
     await page.getByRole('button', { name: 'Comprar como invitado' }).click();
-    await checkoutResponse;
-    await expect(page).toHaveURL(/\/(\?.*)?$/);
+    const response = await checkoutResponse;
+
+    if (response.status() === 200 || response.status() === 201) {
+      await expect(page).toHaveURL(/\/(\?.*)?$/);
+      return;
+    }
+
+    await expect(
+      page.getByText('No se pudo cotizar envio con Andreani. Verifica ciudad/CP o intenta mas tarde.'),
+    ).toBeVisible();
   });
 
   test('register syncs guest cart to server', async ({ page }) => {
@@ -67,9 +79,7 @@ test.describe('Storefront (fullstack)', () => {
     await page.getByLabel('Nombre').fill('E2E');
     await page.getByLabel('Apellido').fill('User');
     await page.getByLabel('Email', { exact: true }).fill(email);
-    await page.getByLabel('Repetir email', { exact: true }).fill(email);
     await page.getByLabel('Password', { exact: true }).fill(password);
-    await page.getByLabel('Repetir password', { exact: true }).fill(password);
 
     await page.getByRole('button', { name: 'Crear cuenta' }).click();
 

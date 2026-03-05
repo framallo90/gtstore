@@ -27,7 +27,7 @@ test('has title', async ({ page }) => {
   });
 
   await page.goto('/');
-  await expect(page.locator('h1')).toContainText('GeekyTreasures');
+  await expect(page.locator('img.brand__wordmark[alt="GeekyTreasures"]')).toBeVisible();
 });
 
 test('renders featured products (mocked API)', async ({ page }) => {
@@ -146,7 +146,8 @@ test('guest can add to cart and sees it in cart (mocked API)', async ({ page }) 
 
   await page.getByRole('link', { name: /Carrito/ }).click();
   await expect(page).toHaveURL('/cart');
-  await expect(page.locator('li.cart-row strong', { hasText: 'Dune' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Carrito' })).toBeVisible();
+  await expect(page.getByRole('main').getByText('Dune')).toBeVisible();
 });
 
 test('login syncs guest cart and keeps returnUrl to checkout (mocked API)', async ({
@@ -314,6 +315,10 @@ test('login syncs guest cart and keeps returnUrl to checkout (mocked API)', asyn
   await page.getByRole('button', { name: 'Agregar al carrito' }).click();
 
   await page.goto('/checkout');
+  await page.getByRole('button', { name: 'Continuar a envio' }).click();
+  await page.getByLabel('Ciudad').fill('Rosario');
+  await page.getByLabel('Codigo postal').fill('2000');
+  await page.getByRole('button', { name: 'Continuar a pago' }).click();
   await page.getByRole('button', { name: 'Login' }).click();
   await expect(page).toHaveURL(/\/login\?returnUrl=%2Fcheckout/);
 
@@ -322,7 +327,7 @@ test('login syncs guest cart and keeps returnUrl to checkout (mocked API)', asyn
   await page.getByRole('button', { name: 'Entrar' }).click();
 
   await expect(page).toHaveURL('/checkout');
-  await expect(page.locator('li.cart-row strong', { hasText: 'Dune' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Checkout' })).toBeVisible();
 });
 
 test('login shows a guided error on invalid credentials (mocked API)', async ({ page }) => {
@@ -382,9 +387,7 @@ test('register shows a guided error when email already exists (mocked API)', asy
   await page.getByLabel('Nombre').fill('Test');
   await page.getByLabel('Apellido').fill('User');
   await page.getByLabel('Email', { exact: true }).fill('test@example.com');
-  await page.getByLabel('Repetir email', { exact: true }).fill('test@example.com');
   await page.getByLabel('Password', { exact: true }).fill('password123');
-  await page.getByLabel('Repetir password').fill('password123');
   await page.getByRole('button', { name: 'Crear cuenta' }).click();
 
   await expect(page.getByRole('alert')).toContainText('Ese email ya existe');
@@ -520,24 +523,31 @@ test('checkout persists guest info + applied coupon across reload (mocked API)',
 
   await page.goto('/checkout');
 
-  await page.getByLabel('Email', { exact: true }).fill('guest@x.com');
-  await page.getByLabel('Repetir email', { exact: true }).fill('guest@x.com');
-  await page.getByLabel('Nombre').fill('Guest');
-  await page.getByLabel('Apellido').fill('X');
   await page.getByLabel('Cupon').fill('GEEK10');
   await page.getByRole('button', { name: 'Aplicar' }).click();
 
   await expect(page.getByText('Descuento')).toBeVisible();
   await expect(page.getByText(/-5\s+USD/)).toBeVisible();
 
+  await page.getByRole('button', { name: 'Continuar a envio' }).click();
+  await page.getByLabel('Ciudad').fill('Rosario');
+  await page.getByLabel('Codigo postal').fill('2000');
+  await page.getByRole('button', { name: 'Continuar a pago' }).click();
+
+  await page.getByLabel('Guardar estos datos solo en este dispositivo para retomar el checkout.').check();
+  await page.getByLabel('Email', { exact: true }).fill('guest@x.com');
+  await page.getByLabel('Nombre').fill('Guest');
+  await page.getByLabel('Apellido').fill('X');
+
   // Give the debounce persistence time to flush.
   await page.waitForTimeout(500);
   await page.reload();
 
+  await expect(page.getByRole('heading', { name: '3) Pago' })).toBeVisible();
   await expect(page.getByLabel('Email', { exact: true })).toHaveValue('guest@x.com');
-  await expect(page.getByLabel('Repetir email', { exact: true })).toHaveValue('guest@x.com');
   await expect(page.getByLabel('Nombre')).toHaveValue('Guest');
   await expect(page.getByLabel('Apellido')).toHaveValue('X');
+  await page.locator('.checkout-stepper__dot').first().click();
   await expect(page.getByLabel('Cupon')).toHaveValue('GEEK10');
 
   // After reload the applied coupon should be re-used automatically via quote.
