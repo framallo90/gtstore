@@ -23,6 +23,10 @@ Nx monorepo con:
 `-- .env.example
 ```
 
+## Checklist externo
+
+- Ver `docs/EXTERNAL_INTEGRATIONS_CHECKLIST.md` para el inventario de integraciones externas, faltantes operativos y requisitos previos de salida a produccion.
+
 ## Configuracion (.env)
 
 1. Crear `.env`:
